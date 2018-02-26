@@ -1,0 +1,9 @@
+# Generated files
+coq.mk
+coq.mk.conf
+
+# Coq
+*.vo
+*.v.d
+*.glob
+.*.aux
