@@ -4,7 +4,7 @@ all: coq.mk
 
 
 coq.mk: _CoqProject *.v
-	coq_makefile -o $@ -f _CoqProject *.v
+	coq_makefile -f _CoqProject -o $@ *.v
 
 
 clean: coq.mk
