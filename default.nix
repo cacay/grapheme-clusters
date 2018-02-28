@@ -5,10 +5,14 @@ let
 
   callPackage = pkgs.lib.callPackageWith (pkgs // pkgs.xlibs // deps);
 
-  coq = pkgs.coqPackages_8_6;
+  coq = pkgs.coqPackages_8_7;
 
   deps = {
-    # wamd = callPackage ./pkgs/wamd { };
+    coq = coq.coq;
+
+    ssreflect = coq.ssreflect;
+
+    regexp = callPackage ./constructive-regexp {};
   };
 in
 pkgs.stdenv.mkDerivation rec {
@@ -17,12 +21,9 @@ pkgs.stdenv.mkDerivation rec {
 
   src = ".";
 
-  # env = pkgs.buildEnv { name = name; paths = buildInputs; };
-
   buildInputs = [
     coq.coq
-    coq.ssreflect
-    # coq.mathcomp
+    deps.regexp
   ];
 
   meta = {
