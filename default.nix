@@ -22,7 +22,8 @@ pkgs.stdenv.mkDerivation rec {
   src = ".";
 
   buildInputs = [
-    coq.coq
+    deps.coq
+    deps.ssreflect
     deps.regexp
   ];
 
