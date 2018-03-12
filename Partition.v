@@ -106,7 +106,7 @@ Proof.
   intros p1 p2 Hprefix1 Hprefix2.
   destruct Hprefix1 as [p2' Heq_p2].
   destruct Hprefix2 as [p1' Heq_p1].
-  unfold splits_into in *; subst.
+  unfold splits_into in *. subst p2.
   rename Heq_p1 into H.
   rewrite <- app_nil_r in H at 1.
   rewrite <- app_assoc in H.
@@ -398,9 +398,7 @@ Proof.
     - exists l2; crush.
   + inversion Hprefix_l1 as [p2 Heq_p2].
     exists p1, p2, p3; repeat split.
-    - unfold splits_into in *; subst.
-      symmetry.
-      apply app_assoc.
+    - unfold splits_into in *; crush.
     - assumption.
     - unfold partitions_into in *; subst.
       unfold splits_into in Heq_p2; subst.
@@ -433,7 +431,7 @@ Qed.
 
 (**
  * Two partitionings are the same if and only if they
- * induce the same breaks (module empty partitions). This
+ * induce the same breaks (modulo empty partitions). This
  * gives us a nice way to characterize partitions.
  *)
 Lemma breaks_eq_implies_partitions_eq {A : Type} :

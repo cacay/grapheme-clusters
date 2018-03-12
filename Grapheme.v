@@ -131,9 +131,9 @@ Axiom no_empty_clusters :
 Theorem clusters_nil_is_nil :
   clusters [] = [].
 Proof.
-  specialize (clusters_partition []) as Hempty.
+  specialize (clusters_partition []); intro Hempty.
   apply empty_list_partitions_into_empty_lists in Hempty.
-  specialize (no_empty_clusters []) as Hno_empty.
+  specialize (no_empty_clusters []); intro Hno_empty.
   destruct (clusters []);
     [auto | inversion Hempty; inversion Hno_empty; contradiction]. 
 Qed.
@@ -146,7 +146,7 @@ Theorem clusters_is_nil_only_on_nil :
   forall s : RawString, clusters s = [] -> s = [].
 Proof.
   intros s H.
-  specialize (clusters_partition s) as Hcs.
+  specialize (clusters_partition s); intro Hcs.
   rewrite H in Hcs; clear H.
   assumption.
 Qed.
@@ -278,14 +278,14 @@ Proof.
         -- apply clusters_need_lookahaed_of_one in Hbreak2.
            apply clusters_need_lookahaed_of_one with (s' := s' ++ s2) in Hbreak2.
 
-           specialize (break_of_break s (c :: s') s2 (clusters ((s ++ c :: s') ++ s2))) as Hbreak3.
+           specialize (break_of_break s (c :: s') s2 (clusters ((s ++ c :: s') ++ s2))); intro Hbreak3.
            specialize (Hbreak3 (no_empty_clusters _) Hbreak).
            rewrite <- app_assoc in Hbreak3; specialize (Hbreak3 Hbreak2).
            destruct Hbreak3 as [p1 [p2 [p3 [Heq_clusters [Heq_p1 [Heq_p2 Heq_p3]]]]]].
            clear Hbreak Hbreak2.
 
            exists p1, p2; repeat split; try assumption.
-           specialize (no_empty_clusters ((s ++ c :: s') ++ s2)) as Hno_empty.
+           specialize (no_empty_clusters ((s ++ c :: s') ++ s2)); intro Hno_empty.
            unfold splits_into in Hsplit; rewrite Hsplit in Hno_empty.
            unfold splits_into in *; unfold partitions_into in *; subst.
            rewrite app_assoc in Heq_clusters; rewrite Heq_clusters in Hsplit; clear Heq_clusters.
@@ -359,11 +359,11 @@ Proof.
     symmetry.
     assumption.
   * unfold splits_into in *.
-    specialize Heq_s2 as Heq.
+    assert (Heq := Heq_s2).
     rewrite Heq_s1 in Heq.
     apply concat_app_eq in Heq; auto.
     - apply no_empty_clusters.
-    - specialize (no_empty_clusters (s1 ++ s2)) as Hno_empty.
+    - specialize (no_empty_clusters (s1 ++ s2)); intro Hno_empty.
       rewrite Heq_s2 in Hno_empty.
       apply Forall_app in Hno_empty.
       apply Hno_empty.
