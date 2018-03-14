@@ -1,0 +1,13 @@
+flags: {}
+
+packages:
+- '.'
+
+resolver: lts-11.0
+
+extra-deps:
+- semiring-num-1.6.0.1
+
+nix:
+  enable: false
+  packages:

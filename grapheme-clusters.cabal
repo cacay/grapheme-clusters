@@ -1,0 +1,50 @@
+name:                grapheme-clusters
+version:             0.1.0.0
+category:            Text
+synopsis:            Constructions on regular expressions to recognize grapheme clusters
+homepage:            https://github.com/cacay/grapheme-clusters
+
+license:             MIT
+license-file:        LICENSE
+
+author:              Cosku Acay
+maintainer:          coskuacay@gmail.com
+
+build-type:          Simple
+cabal-version:       >=1.10
+
+extra-source-files:  README.md
+
+
+library
+  hs-source-dirs:        haskell-src
+
+  default-language:      Haskell2010
+
+  exposed-modules:       RegExp
+                         Set
+                         BooleanAlgebra
+                         KleeneAlgebra
+
+  other-modules:
+
+  build-depends:         base >= 4.9,
+                         flow,
+                         mtl,
+                         containers,
+                         semiring-num
+
+  default-extensions:    ScopedTypeVariables
+                         OverloadedStrings
+                         StandaloneDeriving
+                         DeriveFunctor
+
+  other-extensions:      GADTs
+                         DataKinds
+                         FlexibleInstances
+                         FlexibleContexts
+                         UndecidableInstances
+
+  ghc-options:           -fwarn-incomplete-patterns
+                         -fwarn-unused-imports
+
