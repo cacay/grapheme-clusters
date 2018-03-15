@@ -22,9 +22,10 @@ library
   default-language:      Haskell2010
 
   exposed-modules:       RegExp
-                         Set
+                         Operations
                          BooleanAlgebra
                          KleeneAlgebra
+                         Set
 
   other-modules:
 
@@ -41,6 +42,8 @@ library
 
   other-extensions:      GADTs
                          DataKinds
+                         KindSignatures
+                         TypeFamilies
                          FlexibleInstances
                          FlexibleContexts
                          UndecidableInstances
