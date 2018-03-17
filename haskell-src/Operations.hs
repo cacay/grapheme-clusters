@@ -1,5 +1,4 @@
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE ViewPatterns #-}
 
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -20,6 +19,10 @@ module Operations
     , partialDerivative
     , intersection
     , complement
+
+    -- # Automaton construction
+    , allDerivatives
+    , next
     ) where
 
 import qualified Data.Set
@@ -36,30 +39,43 @@ import Set
 -- | 'True' if and only if the regular expression can match the
 -- empty string.
 nullable :: GSet c => RegExp c -> Bool
-nullable (view -> One) =
-    True
-nullable (view -> Plus r1 r2) =
-    nullable r1 || nullable r2
-nullable (view -> Times r1 r2) =
-    nullable r1 && nullable r2
-nullable (view -> Star _) =
-    True
-nullable (view -> Literal _) =
-    False
+nullable r =
+    case view r of
+        One ->
+            True
+
+        Plus r1 r2 ->
+            nullable r1 || nullable r2
+
+        Times r1 r2 ->
+            nullable r1 && nullable r2
+
+        Star _ ->
+            True
+
+        Literal _ ->
+            False
 
 
 -- | 'True' if and only if the regular expression matches no strings.
 empty :: GSet c => RegExp c -> Bool
-empty (view -> One) =
-    False
-empty (view -> Plus r1 r2) =
-    empty r1 && empty r2
-empty (view -> Times r1 r2) =
-    empty r1 || empty r2
-empty (view -> Star _) =
-    False
-empty (view -> Literal s) =
-    s == zero
+empty r =
+    case view r of
+        One ->
+            False
+
+        Plus r1 r2 ->
+            empty r1 && empty r2
+
+        Times r1 r2 ->
+            empty r1 || empty r2
+
+        Star _ ->
+            False
+
+        Literal p ->
+            p == zero
+
 
 
 -- # Operations
@@ -67,18 +83,25 @@ empty (view -> Literal s) =
 -- | Brzozowski derivative of a regular expression with respect to a character.
 -- @derivative c r@ matches a word @w@ if and only if @r@ matches @cw@.
 derivative :: GSet c => c -> RegExp c -> RegExp c
-derivative c (view -> One) =
-    rZero
-derivative c (view -> Plus r1 r2) =
-    rPlus (derivative c r1) (derivative c r2)
-derivative c (view -> Times r1 r2) | nullable r1 =
-    rPlus (derivative c r1 `rTimes` r2) (derivative c r2)
-derivative c (view -> Times r1 r2) | otherwise =
-    derivative c r1 `rTimes` r2
-derivative c e@(view -> Star r) =
-    derivative c r `rTimes` e
-derivative c (view -> Literal p) =
-    if c `member` p then rOne else rZero
+derivative c r =
+    case view r of
+        One ->
+            rZero
+
+        Plus r1 r2 ->
+            rPlus (derivative c r1) (derivative c r2)
+
+        Times r1 r2 | nullable r1 ->
+            rPlus (derivative c r1 `rTimes` r2) (derivative c r2)
+
+        Times r1 r2 | otherwise ->
+            derivative c r1 `rTimes` r2
+
+        Star r' ->
+            derivative c r' `rTimes` r
+
+        Literal p ->
+            if c `member` p then rOne else rZero
 
 
 -- | Antimirov derivative of a regular expression with respect to a character.
@@ -126,6 +149,29 @@ complement =
     undefined
 
 
+-- # Automaton construction
+
+
+-- | Set of derivatives of a regular expression under all words.
+allDerivatives :: forall c. GSet c => RegExp c -> Data.Set.Set (RegExp c)
+allDerivatives r =
+    helper Data.Set.empty [r]
+    where
+        helper :: Data.Set.Set (RegExp c) -> [RegExp c] -> Data.Set.Set (RegExp c)
+        helper context [] =
+            context
+
+        helper context (r : rest) | r `Data.Set.member` context =
+            helper context rest
+
+        helper context (r : rest) =
+            let
+                derivatives =
+                    [ derivative c r | p <- Data.Set.toList (next r)
+                                     , Just c <- [choose p]]
+            in
+                helper (Data.Set.insert r context) (derivatives ++ rest)
+
 
 -- # Helpers
 
@@ -136,18 +182,25 @@ complement =
 --   @derivative c1 r = derivative c2 r@,
 -- * @not $ c `member` ors (next r)@ implies @derivative c r ~ rZero@.
 next :: GSet c => RegExp c -> Data.Set.Set (CharacterClass c)
-next (view -> One) =
-    Data.Set.singleton zero
-next (view -> Plus r1 r2) =
-    join (next r1) (next r2)
-next (view -> Times r1 r2) | nullable r1 =
-    join (next r1) (next r2)
-next (view -> Times r1 _) | otherwise =
-    next r1
-next (view -> Star r) =
-    next r
-next (view -> Literal p) =
-    Data.Set.singleton p
+next r =
+    case view r of
+        One ->
+            Data.Set.singleton zero
+
+        Plus r1 r2 ->
+            join (next r1) (next r2)
+
+        Times r1 r2 | nullable r1 ->
+            join (next r1) (next r2)
+
+        Times r1 _ | otherwise ->
+            next r1
+
+        Star r ->
+            next r
+
+        Literal p  ->
+            Data.Set.singleton p
 
 
 -- | Given two sets of mutually disjoint character classes, compute

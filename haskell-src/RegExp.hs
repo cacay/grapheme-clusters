@@ -543,7 +543,7 @@ instance (GSet c, Show (CharacterClass c)) => Show (NSeq c) where
             seqPrec = 7
         in
             showParen (d > seqPrec) $
-                intercalate (showString ", ") (map (showsPrec seqPrec) l)
+                intercalate (showString "#") (map (showsPrec seqPrec) l)
 
 
 instance (GSet c, Show (CharacterClass c)) => Show (NStar c) where

@@ -23,6 +23,7 @@ library
 
   exposed-modules:       RegExp
                          Operations
+                         Language
                          BooleanAlgebra
                          KleeneAlgebra
                          Set
