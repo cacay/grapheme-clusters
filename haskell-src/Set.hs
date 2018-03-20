@@ -14,7 +14,7 @@ import Data.Function (on)
 import qualified Data.Set
 import Data.String (IsString(..))
 
-import Data.Semiring (Semiring(..))
+import Data.Semiring (Semiring(..), DetectableZero(..))
 import BooleanAlgebra (BooleanAlgebra(..))
 
 
@@ -55,6 +55,12 @@ instance Ord a => Semiring (FiniteSet a) where
         intersection
 
 
+-- | We know when a finite or cofinite subset of a finite type is empty.
+instance (Bounded a, Enum a, Ord a) => DetectableZero (FiniteSet a) where
+    isZero p =
+        size p == 0
+
+
 -- | Finite and cofinite subsets of a type form a 'BooleanAlgebra'.
 instance Ord a => BooleanAlgebra (FiniteSet a) where
     complement =
@@ -83,7 +89,7 @@ instance (Bounded a, Enum a, Ord a) => GSet a where
 
 
 
--- # Implementation of sets with a more efficient complement operation.
+-- * Implementation of sets with a more efficient complement operation.
 
 -- | Finite and cofinite sets over the elements of a type.
 data FiniteSet a
@@ -170,7 +176,7 @@ union p1 p2 =
 
 
 
--- # Operations on finite types
+-- * Operations on finite types
 
 -- | Number of elements in a finite type.
 sizeOfType :: forall a. (Bounded a, Enum a) => a -> Int

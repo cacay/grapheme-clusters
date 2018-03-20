@@ -25,6 +25,7 @@ module SparseVector
     ) where
 
 import Prelude hiding (length, map, sum, zipWith, (++))
+import Control.Exception (assert)
 
 import Data.Finite
 import Data.Proxy
@@ -92,6 +93,7 @@ map :: (DetectableZero a, DetectableZero b)
     -> SparseVector n a
     -> SparseVector n b
 map f v =
+    assert (isZero $ f zero) $
     UnsafeMakeSparseVector {
         elements =
             removeZeros $
@@ -108,6 +110,7 @@ zipWith :: (DetectableZero a, DetectableZero b, DetectableZero c)
         -> SparseVector n b
         -> SparseVector n c
 zipWith f v1 v2 =
+    assert (isZero $ f zero zero) $
     UnsafeMakeSparseVector {
         elements =
             removeZeros $
@@ -218,7 +221,7 @@ instance (Semiring a, KnownNat n, Show a) => Show (SparseVector n a) where
 
 
 
--- # Helper functions
+-- * Helper functions
 
 -- | Remove zero elements.
 removeZeros :: DetectableZero a => IntMap.IntMap a -> IntMap.IntMap a

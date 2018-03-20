@@ -30,6 +30,7 @@ library
 
   other-modules:         SparseVector
                          SparseMatrix
+                         DFA
 
   build-depends:         base >= 4.9,
                          flow,

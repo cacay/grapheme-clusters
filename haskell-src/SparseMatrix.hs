@@ -1,8 +1,6 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE PartialTypeSignatures #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -16,6 +14,8 @@
 module SparseMatrix
     ( SparseMatrix
     , matrix
+    , fromRows
+    , (!)
 
     , plus
     , times
@@ -82,6 +82,18 @@ matrix l =
         dropRow :: ((r, c), a) -> (c, a)
         dropRow ((r, c), x)=
             (c, x)
+
+
+-- | Construct a sparse matrix from a list of indexed vectors corresponding
+-- to the rows of the matrix.
+fromRows :: (DetectableZero a, KnownNat r, KnownNat c)
+         => [(Finite r, SparseVector c a)]
+         -> SparseMatrix r c a
+fromRows rows =
+    UnsafeMakeSparseMatrix {
+        rows =
+            Vector.vector rows
+    }
 
 
 -- | Matrix addition.

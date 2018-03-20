@@ -2,7 +2,7 @@
 -- so it works nicely with "KleeneAlgebra".
 module BooleanAlgebra
     ( BooleanAlgebra(..)
-    -- # Operations
+    -- * Operations
     , implies
     , butNot
     , ands
@@ -42,7 +42,7 @@ instance BooleanAlgebra Bool where
     complement = not
 
 
--- # Functions over Boolean algebras
+-- * Functions over Boolean algebras
 
 -- | @p `implies` q@ holds if @p@ holds implies @q@ holds.
 implies :: BooleanAlgebra a => a -> a -> a

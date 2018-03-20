@@ -1,11 +1,12 @@
 {-# LANGUAGE MonoLocalBinds #-}
 
--- | The language of a regular expressions is the set of all words
+-- | The language of a regular expression is the set of all words
 -- matched by that expression. Here, we show that languages of regular
 -- expressions (also called regular languages) form a Kleene algebra.
 module Language
     ( Language
     , language
+    , regexp
     ) where
 
 
@@ -17,8 +18,8 @@ import KleeneAlgebra (KleeneAlgebra(..))
 import Set (GSet(..))
 
 
--- | Regular languages, i.e. set of strings that are matched by some
--- regular expression.
+-- | Regular languages over the alphabet @c@, i.e. set of strings that
+-- are matched by some regular expression.
 newtype Language c =
     Language (RegExp c)
 

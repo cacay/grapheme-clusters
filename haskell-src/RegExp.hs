@@ -19,12 +19,12 @@ module RegExp
     ( CharacterClass
     , RegExp
 
-    -- # Deconstructing regular expressions
+    -- * Deconstructing regular expressions
     , RegExpView(..)
     , view
     , hide
 
-    -- # Combining regular expressions
+    -- * Combining regular expressions
     , rZero
     , rOne
     , rPlus
@@ -185,7 +185,7 @@ hide (Literal p) =
 
 
 
--- # Normalized regular expressions
+-- * Normalized regular expressions
 
 -- | A type for regular expressions normalized according to the rewriting
 -- rules in 'RegExp'. This way of writing regular expressions statically
@@ -351,7 +351,7 @@ nStar r =
 
 
 
--- # Convenient syntax for pattern matching on 'NormalizedRegExp's.
+-- * Convenient syntax for pattern matching on 'NormalizedRegExp's.
 
 pattern PZero      <- Inl NZero
 pattern POne       <- Inr (Inl NOne)
@@ -363,7 +363,7 @@ pattern PStar r    <- Inr (Inr (Inr (Inr (NStar r))))
 
 
 
--- # Combining regular expressions
+-- * Combining regular expressions
 
 -- | Regular expression that matches no strings.
 rZero :: RegExp c
@@ -496,7 +496,7 @@ rLiteral p | otherwise =
 
 
 
--- # Printing
+-- * Printing
 
 instance (GSet c, Show (CharacterClass c)) => Show (RegExp c) where
     showsPrec d (RegExp r) =
@@ -562,7 +562,7 @@ intercalate sep l =
 
 
 
--- # Lightweight data types à la carte
+-- * Lightweight data types à la carte
 
 -- | Sum of two types. Essentially 'Either' with a different identity.
 data f :+: g

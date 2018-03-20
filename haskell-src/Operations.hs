@@ -10,21 +10,19 @@
 -- [Symbolic Solving of Extended Regular Expression Inequalities](https://arxiv.org/abs/1410.3227).
 module Operations
     (
-    -- # Tests
+    -- * Tests
       nullable
     , empty
     , equivalent
 
-    -- # Operations
+    -- * Operations
     , derivative
     , partialDerivative
     , intersection
     , complement
 
-    -- # Automaton construction
+    -- * Automaton construction
     , allDerivatives
-    , next
-    , join
     ) where
 
 import qualified Data.Set
@@ -36,7 +34,7 @@ import Data.Semiring (Semiring(..))
 import Set
 
 
--- # Tests
+-- * Tests
 
 -- | 'True' if and only if the regular expression can match the
 -- empty string.
@@ -104,7 +102,7 @@ equivalent =
 
 
 
--- # Operations
+-- * Operations
 
 -- | Brzozowski derivative of a regular expression with respect to a character.
 -- @derivative c r@ matches a word @w@ if and only if @r@ matches @cw@.
@@ -175,7 +173,7 @@ complement =
     undefined
 
 
--- # Automaton construction
+-- * Automaton construction
 
 
 -- | Set of derivatives of a regular expression under all words (i.e.
@@ -200,7 +198,7 @@ allDerivatives r =
                 helper (Data.Set.insert r context) (derivatives ++ rest)
 
 
--- # Helpers
+-- * Helpers
 
 -- | Given a regular expression @r@, compute equivalence classes of
 -- character classes such that:
