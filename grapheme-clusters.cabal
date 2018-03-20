@@ -22,8 +22,8 @@ library
   default-language:      Haskell2010
 
   exposed-modules:       RegExp
-                         Operations
                          Language
+                         Derivative
                          BooleanAlgebra
                          KleeneAlgebra
                          Set

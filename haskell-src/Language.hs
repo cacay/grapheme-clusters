@@ -11,7 +11,7 @@ module Language
 
 
 import RegExp
-import Operations
+import Derivative
 
 import Data.Semiring (Semiring(..), DetectableZero(..))
 import KleeneAlgebra (KleeneAlgebra(..))

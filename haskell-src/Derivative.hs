@@ -5,21 +5,19 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 
--- | Intersection and complement of regular expressions. The development
--- follows
+-- | Derivatives of regular expressions that support character classes.
+-- The development follows
 -- [Symbolic Solving of Extended Regular Expression Inequalities](https://arxiv.org/abs/1410.3227).
-module Operations
+module Derivative
     (
     -- * Tests
       nullable
     , empty
     , equivalent
 
-    -- * Operations
+    -- * Derivative
     , derivative
     , partialDerivative
-    , intersection
-    , complement
 
     -- * Automaton construction
     , allDerivatives
