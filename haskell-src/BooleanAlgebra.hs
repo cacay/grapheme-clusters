@@ -24,6 +24,7 @@ import Data.Semiring (Semiring (..))
 --
 -- == Idempotence of '<+>' and '<.>'
 -- @a '<+>' a = a@
+--
 -- @a '<.>' a = a@
 --
 -- == Upper bounded by 'one'
@@ -31,6 +32,7 @@ import Data.Semiring (Semiring (..))
 --
 -- == Properties of 'complement'
 -- @a '<+>' 'complement' a = 'one'@
+--
 -- @a '<.>' 'complement' a = 'zero'@
 class Semiring a => BooleanAlgebra a where
     -- | Complement or negation.

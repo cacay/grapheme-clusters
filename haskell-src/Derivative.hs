@@ -15,11 +15,11 @@ module Derivative
     , empty
     , equivalent
 
-    -- * Derivative
+    -- * Derivatives
     , derivative
     , partialDerivative
 
-    -- * Automaton construction
+    -- * Automata construction
     , allDerivatives
     ) where
 

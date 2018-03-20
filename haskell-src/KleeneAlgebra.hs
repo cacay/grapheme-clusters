@@ -11,13 +11,16 @@ import Data.Semiring (Semiring (..))
 -- needs to satisfy the following properties:
 --
 -- == Idempotence of '<+>'
--- prop> a '<+>' a = a
+-- @a '<+>' a = a@
 --
 -- == Properties of 'star'
--- prop> 'one' '<+>' (a '<.>' 'star' a) <= 'star' a
--- prop> 'one' '<+>' ('star' a '<.>' a) <= 'star' a
--- prop> b '<+>' (a '<.>' x) <= x ==> ('star' a) '<.>' b <= x
--- prop> b '<+>' (x '<.>' a) <= x ==> b '<.>' ('star' a) <= x
+-- @'one' '<+>' (a '<.>' 'star' a) <= 'star' a@
+--
+-- @'one' '<+>' ('star' a '<.>' a) <= 'star' a@
+--
+-- @b '<+>' (a '<.>' x) <= x ==> ('star' a) '<.>' b <= x@
+--
+-- @b '<+>' (x '<.>' a) <= x ==> b '<.>' ('star' a) <= x@
 --
 -- Here, @a <= b@ is defined as @a '<+>' b = b@.
 class Semiring a => KleeneAlgebra a where

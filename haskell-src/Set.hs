@@ -34,8 +34,10 @@ class (BooleanAlgebra (Set a), Ord (Set a)) => GSet a where
     -- | Return an arbitrary element from a non-empty set; and
     -- 'Nothing' if the set is empty. That is, the following properties
     -- should hold:
+    --
     -- @'choose' 'zero' = 'Nothing'@
-    -- @s /= 'zero' ==> exists a. 'choose' s = 'Just' a && 'holds' a s@
+    --
+    -- @s /= 'zero' ==> exists a. 'choose' s = 'Just' a && 'member' a s@
     choose :: Set a -> Maybe a
 
 

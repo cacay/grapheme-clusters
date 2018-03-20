@@ -44,7 +44,7 @@ import Data.Semiring (Semiring(..))
 import Set
 
 
--- | Sets of characters from the alphabet 'c'.
+-- | Sets of characters from an alphabet 'c'.
 type CharacterClass c =
     Set c
 
@@ -76,10 +76,8 @@ type CharacterClass c =
 --
 -- == Identity and Annihilator for @.@
 --
--- prop> 1 . r = r
--- prop> r . 1 = r
--- prop> 0 . r = 0
--- prop> r . 0 = 0
+-- prop> 1 . r = r = r. 1
+-- prop> 0 . r = 0 = r . 0
 --
 -- == Star
 --
