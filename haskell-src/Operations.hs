@@ -13,6 +13,7 @@ module Operations
     -- # Tests
       nullable
     , empty
+    , equivalent
 
     -- # Operations
     , derivative
@@ -23,6 +24,7 @@ module Operations
     -- # Automaton construction
     , allDerivatives
     , next
+    , join
     ) where
 
 import qualified Data.Set
@@ -75,6 +77,30 @@ empty r =
 
         Literal p ->
             p == zero
+
+
+-- | Two regular expressions are equivalent if only if they match
+-- the same set of strings.
+equivalent :: forall c. GSet c => RegExp c -> RegExp c -> Bool
+equivalent =
+    helper Data.Set.empty
+    where
+        -- TODO: do we have to use union find instead? It will certainly be more
+        -- efficient, but we might in fact need it for completeness.
+        helper :: Data.Set.Set (RegExp c, RegExp c) -> RegExp c -> RegExp c -> Bool
+        helper context r1 r2 | (r1, r2) `Data.Set.member` context =
+            True
+        helper _ r1 r2 | nullable r1 /= nullable r2 =
+            False
+        helper context r1 r2 =
+            let
+                derivatives =
+                    [ (derivative c r1, derivative c r2)
+                    | p <- Data.Set.toList (next r1 `join` next r2)
+                    , Just c <- [choose p]
+                    ]
+            in
+                all (uncurry $ helper $ Data.Set.insert (r1, r2) context) derivatives
 
 
 
@@ -152,7 +178,8 @@ complement =
 -- # Automaton construction
 
 
--- | Set of derivatives of a regular expression under all words.
+-- | Set of derivatives of a regular expression under all words (i.e.
+-- list of characters).
 allDerivatives :: forall c. GSet c => RegExp c -> Data.Set.Set (RegExp c)
 allDerivatives r =
     helper Data.Set.empty [r]

@@ -22,7 +22,7 @@ module RegExp
     -- # Deconstructing regular expressions
     , RegExpView(..)
     , view
-    , unView
+    , hide
 
     -- # Combining regular expressions
     , rZero
@@ -171,16 +171,16 @@ view (RegExp r) =
 
 
 -- | Pack the public view 'RegExpView' back into the abstract view 'RegExp'.
-unView :: GSet c => RegExpView c (RegExp c) -> RegExp c
-unView One =
+hide :: GSet c => RegExpView c (RegExp c) -> RegExp c
+hide One =
     rOne
-unView (Plus r1 r2) =
+hide (Plus r1 r2) =
     rPlus r1 r2
-unView (Times r1 r2) =
+hide (Times r1 r2) =
     rTimes r1 r2
-unView (Star r) =
+hide (Star r) =
     rStar r
-unView (Literal p) =
+hide (Literal p) =
     rLiteral p
 
 
@@ -333,7 +333,7 @@ nUnion :: (NUnion c :<: r, GSet c)
        -> Data.Set.Set (SubUnion c)
        -> r
 nUnion p s =
-    assert (p /= zero || length s >= 2) $
+    assert (p /= zero || Data.Set.size s >= 2) $
         inj (NUnion p s)
 
 
@@ -490,7 +490,7 @@ rStar (RegExp r) =
 -- from the given character class.
 rLiteral :: forall c. GSet c => CharacterClass c -> RegExp c
 rLiteral p | p == zero =
-    RegExp $ nZero
+    RegExp nZero
 rLiteral p | otherwise =
     RegExp $ nUnion p Data.Set.empty
 
@@ -505,7 +505,7 @@ instance (GSet c, Show (CharacterClass c)) => Show (RegExp c) where
 
 instance (GSet c, Show (CharacterClass c)) => Show (RegExpView c (RegExp c)) where
     showsPrec d r =
-        showsPrec d (unView r)
+        showsPrec d (hide r)
 
 
 instance Show NZero where
@@ -529,7 +529,7 @@ instance (GSet c, Show (CharacterClass c)) => Show (NUnion c) where
                 else
                     [showsPrec unionPrec p]
 
-            elements = length literal + length s
+            elements = length literal + Data.Set.size s
         in
             showParen (d > unionPrec && elements > 1) $
                 intercalate

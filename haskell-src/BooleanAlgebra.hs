@@ -3,6 +3,7 @@
 module BooleanAlgebra
     ( BooleanAlgebra(..)
     -- # Operations
+    , implies
     , butNot
     , ands
     , ors
@@ -42,6 +43,12 @@ instance BooleanAlgebra Bool where
 
 
 -- # Functions over Boolean algebras
+
+-- | @p `implies` q@ holds if @p@ holds implies @q@ holds.
+implies :: BooleanAlgebra a => a -> a -> a
+implies p q =
+    complement p <+> q
+
 
 -- | @p `butNot` q@ holds when @p@ holds but @q@ doesn't.
 butNot :: BooleanAlgebra a => a -> a -> a

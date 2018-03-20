@@ -23,3 +23,9 @@ import Data.Semiring (Semiring (..))
 class Semiring a => KleeneAlgebra a where
     -- | Kleene star. Captures the notion of /iteration/.
     star :: a -> a
+
+
+-- | Booleans form a (trivial) Kleene algebra.
+instance KleeneAlgebra Bool where
+    star _ =
+        True

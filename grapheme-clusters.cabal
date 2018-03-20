@@ -28,13 +28,16 @@ library
                          KleeneAlgebra
                          Set
 
-  other-modules:
+  other-modules:         SparseVector
+                         SparseMatrix
 
   build-depends:         base >= 4.9,
                          flow,
                          mtl,
                          containers,
-                         semiring-num
+                         semiring-num,
+                         finite-typelits,
+                         ghc-typelits-natnormalise
 
   default-extensions:    ScopedTypeVariables
                          OverloadedStrings
@@ -51,4 +54,5 @@ library
 
   ghc-options:           -fwarn-incomplete-patterns
                          -fwarn-unused-imports
+                         -- -fplugin GHC.TypeLits.Normalise
 
