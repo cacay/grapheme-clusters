@@ -129,7 +129,7 @@ times m1 m2 =
             transpose m2
 
         cross v1 v2 =
-            Vector.sum (v1 <+> v2)
+            Vector.sum (v1 <.> v2)
 
 
 -- | Swap the rows of a matrix with its columns.

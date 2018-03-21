@@ -135,6 +135,8 @@ instance IsString (FiniteSet Char) where
 instance Show (FiniteSet Char) where
     show (These s) =
         "{" ++ Data.Set.toList s ++ "}"
+    show (ComplementOf s) | Data.Set.null s =
+        "."
     show (ComplementOf s) =
         "~" ++ "{" ++ Data.Set.toList s ++ "}"
 
