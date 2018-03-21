@@ -5,6 +5,7 @@
 {-# LANGUAGE TypeOperators #-}
 
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 -- | Finite state automaton represented as matrices.
 module DFA
@@ -27,6 +28,7 @@ import Data.Singletons
 import Data.Singletons.Prelude
 import Data.Singletons.TypeLits
 
+import Data.List (intercalate)
 import qualified Data.Set
 
 import qualified Data.BooleanAlgebra as BooleanAlgebra
@@ -191,3 +193,18 @@ fromRegExp r =
     where
         derivatives =
             allDerivatives r
+
+
+
+instance (GSet c, KnownNat n, Show (Set c)) => Show (DFA n c) where
+    show d =
+        intercalate "\n"
+            [ "Start state:\n    " ++ show (start d)
+            ,   "Transition matrix:\n" ++ show (transition d)
+            ,   "Accepting states:\n    " ++ show (accept d)
+            ]
+
+
+instance (GSet c, Show (Set c)) => Show (SomeDFA c) where
+    show (SomeDFA d) =
+        show d
