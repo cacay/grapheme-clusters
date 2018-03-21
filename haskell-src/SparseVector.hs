@@ -28,10 +28,11 @@ import Prelude hiding (length, map, sum, zipWith, (++))
 import Control.Exception (assert)
 
 import Data.Finite
-import Data.Proxy
-import GHC.TypeNats
-import qualified Data.IntMap.Strict as IntMap
+import Data.Singletons
+import Data.Singletons.Prelude
+import Data.Singletons.TypeLits
 
+import qualified Data.IntMap.Strict as IntMap
 import Data.Semiring (Semiring(..), DetectableZero(..))
 
 
@@ -62,7 +63,7 @@ v ! i =
 -- | Length of a vector.
 length :: forall n a r. (KnownNat n, Integral r) => SparseVector n a -> r
 length _ =
-    fromIntegral $ natVal (Proxy @n)
+    fromIntegral $ fromSing (sing :: SNat n)
 
 
 -- | Sum of all elements in a vector.
@@ -140,7 +141,7 @@ split v =
             IntMap.mapKeysMonotonic (subtract n) v2'
 
         n =
-            fromIntegral $ natVal (Proxy @n)
+            fromIntegral $ fromSing (sing :: SNat n)
 
 
 
@@ -180,7 +181,7 @@ instance (DetectableZero a, KnownNat n) => Semiring (SparseVector n a) where
             }
         where
             length =
-                fromIntegral $ natVal (Proxy @n)
+                fromIntegral $ fromSing (sing :: SNat n)
 
 
     -- | Vector addition.

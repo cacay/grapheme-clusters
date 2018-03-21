@@ -24,9 +24,11 @@ library
   exposed-modules:       RegExp
                          Language
                          Derivative
+                         Operations
                          BooleanAlgebra
                          KleeneAlgebra
                          Set
+                         Data.Semiring
 
   other-modules:         SparseVector
                          SparseMatrix
@@ -36,9 +38,9 @@ library
                          flow,
                          mtl,
                          containers,
-                         semiring-num,
-                         finite-typelits,
-                         ghc-typelits-natnormalise
+                         -- semiring-num,
+                         singletons,
+                         finite-typelits
 
   default-extensions:    ScopedTypeVariables
                          OverloadedStrings
@@ -55,5 +57,3 @@ library
 
   ghc-options:           -fwarn-incomplete-patterns
                          -fwarn-unused-imports
-                         -- -fplugin GHC.TypeLits.Normalise
-

@@ -19,7 +19,7 @@ import BooleanAlgebra (BooleanAlgebra(..))
 
 
 -- | Sets over a type @a@.
-class (BooleanAlgebra (Set a), Ord (Set a)) => GSet a where
+class (BooleanAlgebra (Set a), DetectableZero (Set a), Ord (Set a)) => GSet a where
     -- | Sets of elements of @a@.
     type Set a :: *
 

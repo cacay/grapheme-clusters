@@ -1,10 +1,5 @@
 {-# LANGUAGE GADTs #-}
 
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE UndecidableInstances #-}
-
-
 -- | Derivatives of regular expressions that support character classes.
 -- The development follows
 -- [Symbolic Solving of Extended Regular Expression Inequalities](https://arxiv.org/abs/1410.3227).
@@ -21,6 +16,7 @@ module Derivative
 
     -- * Automata construction
     , allDerivatives
+    , next
     ) where
 
 import qualified Data.Set
@@ -161,24 +157,14 @@ partialDerivative c r =
             Data.Set.map (`rTimes` r) s
 
 
-intersection :: GSet c => RegExp c -> RegExp c -> RegExp c
-intersection =
-    undefined
-
-
-complement :: GSet c => RegExp c -> RegExp c
-complement =
-    undefined
-
 
 -- * Automaton construction
 
 
--- | Set of derivatives of a regular expression under all words (i.e.
--- list of characters).
+-- | Set of derivatives of a regular expression under all words.
 allDerivatives :: forall c. GSet c => RegExp c -> Data.Set.Set (RegExp c)
 allDerivatives r =
-    helper Data.Set.empty [r]
+    Data.Set.insert rZero (helper Data.Set.empty [r])
     where
         helper :: Data.Set.Set (RegExp c) -> [RegExp c] -> Data.Set.Set (RegExp c)
         helper context [] =
@@ -230,14 +216,14 @@ next r =
 -- a set of mutually disjoint character classes that cover both input
 -- sets. More concretely, given @s1@ and @s2@ such that
 --
--- prop> disjoint s1 && disjoint s2
+-- @'disjoint' s1 && 'disjoint' s2@
 --
 -- we have:
 --
--- prop> ors (join s1 s2) = ors s1 <+> ors s2
--- prop> disjoint (join s1 s2)
--- prop> all (\p -> all (\p1 -> p <.> p1 == zero || p `subset` p1) s1) (join s1 s2)
--- prop> all (\p -> all (\p2 -> p <.> p2 == zero || p `subset` p2) s2) (join s1 s2)
+-- * @'ors' ('join' s1 s2) = 'ors' s1 <+> 'ors' s2@
+-- * @'disjoint' ('join' s1 s2)@
+-- * @'all' (\p -> 'all' (\p1 -> p '<.>' p1 == 'zero' || p `subset` p1) s1) ('join' s1 s2)@
+-- * @'all' (\p -> 'all' (\p2 -> p '<.>' p2 == 'zero' || p `subset` p2) s2) ('join' s1 s2)@
 join :: GSet c
      => Data.Set.Set (CharacterClass c)
      -> Data.Set.Set (CharacterClass c)

@@ -4,7 +4,11 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+
+-- TODO: remove
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 -- | A very cruddy implementation of sparse matrices. I couldn't
 -- find an existing implementation that had all that I needed, so
@@ -34,10 +38,10 @@ import Data.List (sortBy, groupBy, intercalate)
 import Data.Ord (comparing)
 
 import Data.Finite
-import Data.Proxy
-import Data.Type.Equality
-import GHC.TypeNats
-import Unsafe.Coerce (unsafeCoerce)
+import Data.Singletons
+import Data.Singletons.Decide
+import Data.Singletons.Prelude
+import Data.Singletons.TypeLits
 
 import Data.Semiring (Semiring(..), DetectableZero(..))
 import KleeneAlgebra
@@ -68,7 +72,9 @@ m ! (r, c) =
 -- that don't appear in the list are all set to zero.
 --
 -- We need detectable zeros so we can filter them out.
-matrix :: (DetectableZero a, KnownNat r, KnownNat c) => [((Finite r, Finite c), a)] -> SparseMatrix r c a
+matrix :: (DetectableZero a, KnownNat r, KnownNat c)
+       => [((Finite r, Finite c), a)]
+       -> SparseMatrix r c a
 matrix l =
     UnsafeMakeSparseMatrix {
         rows =
@@ -137,6 +143,57 @@ transpose m =
     }
 
 
+-- | Split a square matrix into four quadrants.
+split :: forall s t a. (DetectableZero a, KnownNat s, KnownNat t)
+      => SparseMatrix (s + t) (s + t) a
+      -> ( SparseMatrix s s a
+         , SparseMatrix s t a
+         , SparseMatrix t s a
+         , SparseMatrix t t a
+         )
+split m =
+    withKnownNat ((sing :: SNat s) %+ (sing :: SNat t)) $
+        let
+            (top, bottom) =
+                Vector.split (rows m)
+
+            topSplit =
+                Vector.map Vector.split top
+
+            bottomSplit =
+                Vector.map Vector.split bottom
+
+            a = UnsafeMakeSparseMatrix { rows = Vector.map fst topSplit }
+            b = UnsafeMakeSparseMatrix { rows = Vector.map snd topSplit }
+            c = UnsafeMakeSparseMatrix { rows = Vector.map fst bottomSplit }
+            d = UnsafeMakeSparseMatrix { rows = Vector.map snd bottomSplit }
+        in
+            (a, b, c, d)
+
+
+-- | Combine four quadrants into a single square matrix.
+combine :: forall s t a. (DetectableZero a, KnownNat s, KnownNat t)
+        => ( SparseMatrix s s a
+           , SparseMatrix s t a
+           , SparseMatrix t s a
+           , SparseMatrix t t a
+           )
+        -> SparseMatrix (s + t) (s + t) a
+combine (a, b, c, d) =
+    withKnownNat ((sing :: SNat s) %+ (sing :: SNat t)) $
+        let
+            top =
+                Vector.zipWith (Vector.++) (rows a) (rows b)
+
+            bottom =
+                Vector.zipWith (Vector.++) (rows c) (rows d)
+        in
+            UnsafeMakeSparseMatrix {
+                rows =
+                    top Vector.++ bottom
+            }
+
+
 -- | We can map from matrices with one type for elements to another given
 -- a semiring homomorphism. Note that this does not work for arbitrary
 -- functions. Specifically, this function must map zeros to zeros.
@@ -195,81 +252,40 @@ instance (DetectableZero a, KnownNat n) => DetectableZero (SparseMatrix n n a) w
 
 -- | Square matrices over Kleene algebra form a Kleene algebra.
 instance (DetectableZero a, KleeneAlgebra a, KnownNat n) => KleeneAlgebra (SparseMatrix n n a) where
-    star m | Just Refl <- sameNat (Proxy @n) (Proxy @0) =
+    star m | Proved Refl <- (sing :: SNat n) %~ (sing :: SNat 0) =
         m
-    star m | Just Refl <- sameNat (Proxy @n) (Proxy @1) =
+    star m | Proved Refl <- (sing :: SNat n) %~ (sing :: SNat 1) =
         matrix [((0,0), star (m ! (0, 0)))]
     star m =
         -- TODO: get rid of 'unsafeCoerce' or limit it to proving @n = small + large@.
-        case (someNatVal (fromIntegral $ n `div` 2), someNatVal (fromIntegral $ (n + 1) `div` 2)) of
-            (SomeNat (Proxy :: Proxy small), SomeNat (Proxy :: Proxy large)) ->
-                UnsafeMakeSparseMatrix {
-                    rows =
-                        unsafeCoerce (rows top' Vector.++ rows bottom')
-                }
+        withKnownNat ((sing :: SNat n) `sDiv` (sing :: SNat 2)) $
+        withKnownNat (((sing :: SNat n) %+ (sing :: SNat 1)) `sDiv` (sing :: SNat 2)) $
+        withKnownNat (((sing :: SNat n) `sDiv` (sing :: SNat 2))
+                     %+
+                     (((sing :: SNat n) %+ (sing :: SNat 1)) `sDiv` (sing :: SNat 2))
+                     ) $
+        case (sing :: SNat n) %~ (sing :: SNat ((n `Div` 2) + ((n + 1) `Div` 2))) of
+            Proved Refl ->
+                combine (a', b', c', d')
                 where
-                    top :: SparseVector small (SparseVector n a)
-                    bottom :: SparseVector large (SparseVector n a)
-                    (top, bottom) =
-                        Vector.split (unsafeCoerce $ rows m)
+                    a :: SparseMatrix (n `Div` 2) (n `Div` 2) a
+                    (a, b, c, d) =
+                        split m
 
-                    topSplit :: SparseVector small (SparseVector small a, SparseVector large a)
-                    topSplit =
-                        Vector.map (Vector.split . unsafeCoerce) top
-
-                    bottomSplit :: SparseVector large (SparseVector small a, SparseVector large a)
-                    bottomSplit =
-                        Vector.map (Vector.split . unsafeCoerce) bottom
-
-
-                    a :: SparseMatrix small small a
-                    a = UnsafeMakeSparseMatrix { rows = Vector.map fst topSplit }
-
-                    b :: SparseMatrix small large a
-                    b = UnsafeMakeSparseMatrix { rows = Vector.map snd topSplit }
-
-                    c :: SparseMatrix large small a
-                    c = UnsafeMakeSparseMatrix { rows = Vector.map fst bottomSplit }
-
-                    d :: SparseMatrix large large a
-                    d = UnsafeMakeSparseMatrix { rows = Vector.map snd bottomSplit }
-
-
-                    a' :: SparseMatrix small small a
+                    -- a' :: SparseMatrix small small a
                     a' = star (a `plus` (b `times` star d `times` c))
 
-                    b' :: SparseMatrix small large a
+                    -- b' :: SparseMatrix small large a
                     b' = star (a `plus` (b `times` star d `times` c)) `times` b `times` star d
 
-                    c' :: SparseMatrix large small a
+                    -- c' :: SparseMatrix large small a
                     c' = star (d `plus` (c `times` star a `times` b)) `times` c `times` star a
 
-                    d' :: SparseMatrix large large a
+                    -- d' :: SparseMatrix large large a
                     d' = star (d `plus` (c `times` star a `times` b))
 
-
-                    top' :: SparseMatrix small n a
-                    top' =
-                        UnsafeMakeSparseMatrix {
-                            rows =
-                                Vector.zipWith
-                                    (\v1 v2 -> unsafeCoerce $ v1 Vector.++ v2)
-                                    (rows a')
-                                    (rows b')
-                        }
-
-                    bottom' :: SparseMatrix large n a
-                    bottom' =
-                        UnsafeMakeSparseMatrix {
-                            rows =
-                                Vector.zipWith
-                                    (\v1 v2 -> unsafeCoerce $ v1 Vector.++ v2)
-                                    (rows c')
-                                    (rows d')
-                        }
-        where
-            n =
-                fromIntegral $ natVal (Proxy @n)
+            Disproved _->
+                error "impossible"
 
 
 
@@ -300,7 +316,7 @@ instance (DetectableZero a, Show a, KnownNat r, KnownNat c) => Show (SparseMatri
             -- | Width of the widest entry in the matrix.
             widest :: Int
             widest =
-                foldr max 0 [ length (show a) | a <- concat grid]
+                foldr max 0 [ length (show a) | a <- concat grid ]
 
             -- | Show with a constant width.
             padded :: Int -> a -> String
