@@ -34,7 +34,7 @@ library
                          SparseMatrix
                          DFA
 
-  build-depends:         base >= 4.9,
+  build-depends:         base >= 4.11,
                          flow,
                          mtl,
                          containers,
@@ -57,3 +57,27 @@ library
 
   ghc-options:           -fwarn-incomplete-patterns
                          -fwarn-unused-imports
+
+
+test-suite spec
+  type: exitcode-stdio-1.0
+
+  hs-source-dirs:        test
+
+  default-language:      Haskell2010
+
+  main-is:               Spec.hs
+
+  other-modules:         RegExp.RegExpSpec
+
+  build-depends:         base >= 4.11,
+                         grapheme-clusters,
+                         hspec,
+                         QuickCheck
+
+  default-extensions:    ScopedTypeVariables
+                         OverloadedStrings
+                         StandaloneDeriving
+                         DeriveFunctor
+
+  ghc-options:           -Wall

@@ -4,10 +4,11 @@
 -- The development follows
 -- [Symbolic Solving of Extended Regular Expression Inequalities](https://arxiv.org/abs/1410.3227).
 module RegExp.Derivative
-    (
+    ( Word
     -- * Tests
-      nullable
+    , nullable
     , empty
+    , matches
     , equivalent
 
     -- * Derivatives
@@ -19,6 +20,7 @@ module RegExp.Derivative
     , next
     ) where
 
+import Prelude hiding (Word)
 import qualified Data.Set
 
 import RegExp.RegExp
@@ -26,6 +28,13 @@ import RegExp.RegExp
 import Data.BooleanAlgebra
 import Data.Semiring (Semiring(..))
 import Data.GSet
+
+
+
+-- | String of characters from an alphabet @c@.
+type Word c =
+    [c]
+
 
 
 -- * Tests
@@ -69,6 +78,14 @@ empty r =
 
         Literal p ->
             p == zero
+
+
+-- | @r `matches` w@ if the regular expression @r@ accepts word @w@.
+matches :: GSet c => RegExp c -> Word c -> Bool
+matches r [] =
+    nullable r
+matches r (c : w) =
+    matches (derivative c r) w
 
 
 -- | Two regular expressions are equivalent if only if they match
@@ -158,8 +175,7 @@ partialDerivative c r =
 
 
 
--- * Automaton construction
-
+-- * Automata construction
 
 -- | Set of derivatives of a regular expression under all words.
 allDerivatives :: forall c. GSet c => RegExp c -> Data.Set.Set (RegExp c)
@@ -180,6 +196,7 @@ allDerivatives r =
                                      , Just c <- [choose p]]
             in
                 helper (Data.Set.insert r context) (derivatives ++ rest)
+
 
 
 -- * Helpers
