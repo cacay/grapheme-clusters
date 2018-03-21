@@ -5,7 +5,7 @@
 
 
 -- | A generic interface for sets over a type.
-module Set
+module Data.GSet
     ( GSet (..)
     ) where
 
@@ -14,8 +14,8 @@ import Data.Function (on)
 import qualified Data.Set
 import Data.String (IsString(..))
 
+import Data.BooleanAlgebra (BooleanAlgebra(..))
 import Data.Semiring (Semiring(..), DetectableZero(..))
-import BooleanAlgebra (BooleanAlgebra(..))
 
 
 -- | Sets over a type @a@.

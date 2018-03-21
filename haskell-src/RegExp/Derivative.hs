@@ -3,7 +3,7 @@
 -- | Derivatives of regular expressions that support character classes.
 -- The development follows
 -- [Symbolic Solving of Extended Regular Expression Inequalities](https://arxiv.org/abs/1410.3227).
-module Derivative
+module RegExp.Derivative
     (
     -- * Tests
       nullable
@@ -21,11 +21,11 @@ module Derivative
 
 import qualified Data.Set
 
-import RegExp
+import RegExp.RegExp
 
-import BooleanAlgebra hiding (complement)
+import Data.BooleanAlgebra
 import Data.Semiring (Semiring(..))
-import Set
+import Data.GSet
 
 
 -- * Tests

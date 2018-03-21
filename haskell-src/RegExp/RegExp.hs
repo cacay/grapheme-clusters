@@ -15,7 +15,7 @@
 -- using (sound) rewriting rules. We normalize regular expressions
 -- enough to guarantee that the set of Brzozowski derivatives are
 -- finite.
-module RegExp
+module RegExp.RegExp
     ( CharacterClass
     , RegExp
 
@@ -41,7 +41,7 @@ import Data.Set (minView)
 import Data.String (IsString(..))
 
 import Data.Semiring (Semiring(..))
-import Set
+import Data.GSet
 
 
 -- | Sets of characters from an alphabet 'c'.

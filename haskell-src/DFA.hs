@@ -29,15 +29,15 @@ import Data.Singletons.TypeLits
 
 import qualified Data.Set
 
+import qualified Data.BooleanAlgebra as BooleanAlgebra
 import Data.Semiring(Semiring(..))
-import qualified BooleanAlgebra
-import KleeneAlgebra
-import Set
+import Data.KleeneAlgebra
+import Data.GSet
 
-import RegExp
-import Derivative
-import Language (Language)
-import qualified Language
+import RegExp.RegExp
+import RegExp.Derivative
+import RegExp.Language (Language)
+import qualified RegExp.Language as Language
 
 
 import SparseVector (SparseVector)

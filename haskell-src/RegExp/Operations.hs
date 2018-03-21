@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs #-}
 
 -- | Operations over regular expressions.
-module Operations
+module RegExp.Operations
     ( intersection
     , complement
     ) where
@@ -12,8 +12,9 @@ import Data.Singletons.Prelude
 import Data.Singletons.TypeLits
 
 import qualified DFA
-import RegExp
-import Set
+import RegExp.RegExp
+
+import Data.GSet
 
 
 -- | A regular expression that accepts words both given expressions accept

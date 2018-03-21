@@ -1,6 +1,6 @@
 -- | Definition of Boolean algebras. We base the definition on semirings
 -- so it works nicely with "KleeneAlgebra".
-module BooleanAlgebra
+module Data.BooleanAlgebra
     ( BooleanAlgebra(..)
     -- * Operations
     , implies

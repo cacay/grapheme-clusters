@@ -21,13 +21,13 @@ library
 
   default-language:      Haskell2010
 
-  exposed-modules:       RegExp
-                         Language
-                         Derivative
-                         Operations
-                         BooleanAlgebra
-                         KleeneAlgebra
-                         Set
+  exposed-modules:       RegExp.RegExp
+                         RegExp.Language
+                         RegExp.Derivative
+                         RegExp.Operations
+                         Data.BooleanAlgebra
+                         Data.KleeneAlgebra
+                         Data.GSet
                          Data.Semiring
 
   other-modules:         SparseVector

@@ -1,5 +1,5 @@
 -- | Definition of Kleene algebras.
-module KleeneAlgebra
+module Data.KleeneAlgebra
     ( KleeneAlgebra(..)
     ) where
 

@@ -3,19 +3,19 @@
 -- | The language of a regular expression is the set of all words
 -- matched by that expression. Here, we show that languages of regular
 -- expressions (also called regular languages) form a Kleene algebra.
-module Language
+module RegExp.Language
     ( Language
     , language
     , regexp
     ) where
 
 
-import RegExp
-import Derivative
+import RegExp.RegExp
+import RegExp.Derivative
 
 import Data.Semiring (Semiring(..), DetectableZero(..))
-import KleeneAlgebra (KleeneAlgebra(..))
-import Set (GSet(..))
+import Data.KleeneAlgebra (KleeneAlgebra(..))
+import Data.GSet (GSet(..))
 
 
 -- | Regular languages over the alphabet @c@, i.e. set of strings that

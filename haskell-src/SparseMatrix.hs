@@ -44,7 +44,7 @@ import Data.Singletons.Prelude
 import Data.Singletons.TypeLits
 
 import Data.Semiring (Semiring(..), DetectableZero(..))
-import KleeneAlgebra
+import Data.KleeneAlgebra
 
 import SparseVector (SparseVector)
 import qualified SparseVector as Vector
