@@ -16,11 +16,11 @@ module Segmentation
     ) where
 
 
-import Data.Semiring(Semiring(..))
-import Data.GSet
-
 import RegExp.RegExp
 import qualified RegExp.Operations as Operations
+
+import Data.GSet
+import Data.Semiring(Semiring(..))
 
 import GraphemeClusterBreak
 

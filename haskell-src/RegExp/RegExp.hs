@@ -226,8 +226,8 @@ deriving instance Ord NOne
 -- things are happening here:
 --
 -- 1. We bundle character sets with unions because we want to ensure we
---    combine them using set union instead of regular expression union which
---    is syntactic.
+--    combine them using set union instead of the syntactic regular
+--    expression union.
 -- 2. We define union over sets so associativity, commutativity, and
 --    idempotence are automatically enforced.
 --

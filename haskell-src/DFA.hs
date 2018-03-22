@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
 {-# LANGUAGE FlexibleContexts #-}
@@ -12,14 +12,14 @@ module DFA
     ( Dfa
 
     -- * Combining DFAs
-    , complement
-    , intersection
+    , product
 
     -- * Convert from/to regular expressions
     , regexp
     , fromRegExp
     ) where
 
+import Prelude hiding (product)
 import Flow
 
 import Data.Finite
@@ -30,7 +30,7 @@ import Data.Singletons.TypeLits
 import Data.List (intercalate)
 import qualified Data.Set
 
-import qualified Data.BooleanAlgebra as BooleanAlgebra
+import Data.BooleanAlgebra
 import Data.Semiring(Semiring(..))
 import Data.KleeneAlgebra
 import Data.GSet
@@ -79,18 +79,47 @@ data DfaSize (n :: Nat) c =
     }
 
 
--- | @complement d@ accepts precisely the words that @d@ doesn't.
-complement :: GSet c => Dfa c -> Dfa c
-complement (Dfa d) =
-    Dfa $
-        d {
-            accept =
-                accept d
-                    |> Vector.toList
-                    |> fmap not
-                    |> zip finites
-                    |> Vector.vector
+-- | Generic product construction over two DFAs. Intersection
+-- and union of DFAs can be recovered as special cases by passing
+-- in '(<.>)' and '(<+>)', respectively.
+product :: forall c. GSet c
+        => (forall a. BooleanAlgebra a => a -> a -> a)
+        -> Dfa c
+        -> Dfa c
+        -> Dfa c
+product f (Dfa (d1 :: DfaSize n c)) (Dfa (d2 :: DfaSize m c)) =
+    withKnownNat ((sing :: SNat n) %* (sing :: SNat m)) $
+    Dfa $ DfaSize {
+        start =
+            state (start d1) (start d2),
+
+        transition =
+            Matrix.matrix
+                [ ((state n m, state n' m'), f s1 s2)
+                | n <- finites
+                , n' <- finites
+                , m <- finites
+                , m' <- finites
+                , let s1 = transition d1 Matrix.! (n, n')
+                , let s2 = transition d2 Matrix.! (m, m')
+                ],
+
+        accept =
+            Vector.vector
+                [ (state n m, f a1 a2)
+                | n <- finites
+                , m <- finites
+                , let a1 = accept d1 Vector.! n
+                , let a2 = accept d2 Vector.! m
+                ]
         }
+    where
+        -- | State in the product automata that corresponds to the given
+        -- pair of states.
+        state :: Finite n -> Finite m -> Finite (n * m)
+        state i j =
+           combineProduct (i, j)
+
 
 
 -- | DFA that accepts words accepted by both input DFAs.
@@ -113,8 +142,8 @@ intersection (Dfa (d1 :: DfaSize n c)) (Dfa (d2 :: DfaSize m c)) =
                 [ (state n m, a1 <.> a2)
                 | (n, a1) <- Vector.nonZero (accept d1)
                 , (m, a2) <- Vector.nonZero (accept d2)
-            ]
-    }
+                ]
+        }
     where
         -- | State in the product automata that corresponds to the given
         -- pair of states.
@@ -122,6 +151,63 @@ intersection (Dfa (d1 :: DfaSize n c)) (Dfa (d2 :: DfaSize m c)) =
         state i j =
            combineProduct (i, j)
 
+
+-- | We can form a semiring over DFAs by interpreting them as sets
+-- of words.
+instance GSet c => Semiring (Dfa c) where
+    -- | DFA that accepts no words.
+    zero =
+        Dfa $ DfaSize {
+            start =
+                finite 0 :: Finite 1,
+
+            transition =
+                Matrix.matrix [((0, 0), one)],
+
+            accept =
+                Vector.vector [(0, False)]
+        }
+
+    -- | DFA that accepts all words.
+    one =
+        Dfa $ DfaSize {
+            start =
+                finite 0 :: Finite 1,
+
+            transition =
+                Matrix.matrix [((0, 0), one)],
+
+            accept =
+                Vector.vector [(0, True)]
+        }
+
+    -- | DFA that accepts words accepted by either DFA.
+    (<+>) =
+        product (<+>)
+
+    -- | DFA that accepts words accepted by both DFAs.
+    (<.>) =
+        intersection
+
+
+-- | We can form a boolean algebra over DFAs by interpreting them as
+-- sets of words.
+instance GSet c => BooleanAlgebra (Dfa c) where
+    -- | @complement d@ accepts precisely the words that @d@ doesn't.
+    complement (Dfa d) =
+        Dfa $
+            d {
+                accept =
+                    accept d
+                        |> Vector.toList
+                        |> fmap not
+                        |> zip finites
+                        |> Vector.vector
+            }
+
+
+
+-- * Converting to and from regular expressions
 
 -- | Convert a DFA to a regular expression.
 regexp :: forall c. GSet c => Dfa c -> RegExp c
@@ -167,7 +253,7 @@ fromRegExp r =
                 row :: RegExp c -> SparseVector n (CharacterClass c)
                 row r =
                     Vector.vector $
-                        (state rZero, BooleanAlgebra.complement $ BooleanAlgebra.ors $ next r) :
+                        (state rZero, complement $ ors $ next r) :
                         [ (state (derivative c r), p)
                         | p <- Data.Set.toList (next r)
                         , Just c <- [choose p]
@@ -188,6 +274,9 @@ fromRegExp r =
         derivatives =
             allDerivatives r
 
+
+
+-- * Showing DFAs
 
 instance (GSet c, Show (Set c)) => Show (Dfa c) where
     show (Dfa d) =
