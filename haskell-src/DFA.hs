@@ -188,7 +188,7 @@ fromRegExp r =
                             [(state d, row d) | d <- Data.Set.toList derivatives],
 
                     accept =
-                        Vector.vector [(state d, nullable d) | d <- Data.Set.toList derivatives]
+                        Vector.vector [(state d, True) | d <- Data.Set.toList derivatives, nullable d]
                 }
     where
         derivatives =

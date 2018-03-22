@@ -124,7 +124,7 @@ instance forall a.(Bounded a, Enum a, Ord a) => Ord (FiniteSet a) where
     compare p1@(These _) p2@(ComplementOf _) =
         (compare `on` toList) p1 p2
     compare p1@(ComplementOf _) p2@(These _) =
-        compare p2 p1
+        (compare `on` toList) p1 p2
     compare (ComplementOf s1) p2@(ComplementOf s2) =
         compare s2 s1
 

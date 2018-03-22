@@ -16,7 +16,6 @@ module Segmentation
     ) where
 
 
-import Data.BooleanAlgebra
 import Data.Semiring(Semiring(..))
 import Data.GSet
 
