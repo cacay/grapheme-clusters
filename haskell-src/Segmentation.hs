@@ -117,7 +117,7 @@ graphemeClusterBoundaries = Rules
     , NoBoundary (AnyLeft $ lit [CR])              (AnyRight $ lit [LF])
     , Boundary   (AnyLeft $ lit [Control, CR, LF]) (AnyRight rOne)
     , Boundary   (AnyLeft rOne)                     (AnyRight $ lit [Control, CR, LF])
-    , Boundary   (AnyLeft rOne)                     (AnyRight $ rOne)
+    , Boundary   (AnyLeft any)                     (AnyRight $ any)
     ]
     where
         lit = rLiteral

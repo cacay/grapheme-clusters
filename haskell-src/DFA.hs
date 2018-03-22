@@ -9,8 +9,7 @@
 
 -- | Finite state automaton represented as matrices.
 module DFA
-    ( DFA
-    , SomeDFA(..)
+    ( Dfa
 
     -- * Combining DFAs
     , complement
@@ -49,11 +48,15 @@ import SparseMatrix (SparseMatrix)
 import qualified SparseMatrix as Matrix
 
 
+-- | Deterministic finite state automata that accept words over alphabet @c@.
+data Dfa c where
+    Dfa :: KnownNat n => DfaSize n c -> Dfa c
+
 
 -- | Deterministic finite state automata with @n@ states that accept words
 -- over alphabet @c@.
-data DFA (n :: Nat) c =
-    DFA {
+data DfaSize (n :: Nat) c =
+    DfaSize {
         -- | The start state.
         start :: Finite n,
 
@@ -76,32 +79,25 @@ data DFA (n :: Nat) c =
     }
 
 
--- | A 'DFA' with an unknown number of states.
-data SomeDFA c where
-    SomeDFA :: KnownNat n => DFA n c -> SomeDFA c
-
-
 -- | @complement d@ accepts precisely the words that @d@ doesn't.
-complement :: (GSet c, KnownNat n) => DFA n c -> DFA n c
-complement d =
-    d {
-        accept =
-            accept d
-                |> Vector.toList
-                |> fmap not
-                |> zip finites
-                |> Vector.vector
-    }
+complement :: GSet c => Dfa c -> Dfa c
+complement (Dfa d) =
+    Dfa $
+        d {
+            accept =
+                accept d
+                    |> Vector.toList
+                    |> fmap not
+                    |> zip finites
+                    |> Vector.vector
+        }
 
 
 -- | DFA that accepts words accepted by both input DFAs.
-intersection :: forall n m c. (GSet c, KnownNat n, KnownNat m)
-             => DFA n c
-             -> DFA m c
-             -> DFA (n * m) c
-intersection d1 d2 =
+intersection :: forall c. GSet c => Dfa c -> Dfa c -> Dfa c
+intersection (Dfa (d1 :: DfaSize n c)) (Dfa (d2 :: DfaSize m c)) =
     withKnownNat ((sing :: SNat n) %* (sing :: SNat m)) $
-    DFA {
+    Dfa $ DfaSize {
         start =
             state (start d1) (start d2),
 
@@ -117,7 +113,7 @@ intersection d1 d2 =
                 [ (state n m, a1 <.> a2)
                 | (n, a1) <- Vector.nonZero (accept d1)
                 , (m, a2) <- Vector.nonZero (accept d2)
-                ]
+            ]
     }
     where
         -- | State in the product automata that corresponds to the given
@@ -128,10 +124,8 @@ intersection d1 d2 =
 
 
 -- | Convert a DFA to a regular expression.
-regexp :: forall n c. (GSet c, KnownNat n)
-       => DFA n c
-       -> RegExp c
-regexp d =
+regexp :: forall c. GSet c => Dfa c -> RegExp c
+regexp (Dfa (d :: DfaSize n c)) =
     Language.regexp $
         (s `Matrix.times` star m `Matrix.times` t) Matrix.! (0, 0)
     where
@@ -156,7 +150,7 @@ regexp d =
 
 
 -- | Convert a regular expression to a DFA.
-fromRegExp :: forall c. GSet c => RegExp c -> SomeDFA c
+fromRegExp :: forall c. GSet c => RegExp c -> Dfa c
 fromRegExp r =
     case toSing (fromIntegral $ Data.Set.size derivatives) of
         SomeSing (s :: SNat n) ->
@@ -179,7 +173,7 @@ fromRegExp r =
                         , Just c <- [choose p]
                         ]
             in
-                SomeDFA $ DFA {
+                Dfa $ DfaSize {
                     start =
                         state r,
 
@@ -195,16 +189,15 @@ fromRegExp r =
             allDerivatives r
 
 
+instance (GSet c, Show (Set c)) => Show (Dfa c) where
+    show (Dfa d) =
+        show d
 
-instance (GSet c, KnownNat n, Show (Set c)) => Show (DFA n c) where
+
+instance (GSet c, KnownNat n, Show (Set c)) => Show (DfaSize n c) where
     show d =
         intercalate "\n"
             [ "Start state:\n    " ++ show (start d)
             ,   "Transition matrix:\n" ++ show (transition d)
             ,   "Accepting states:\n    " ++ show (accept d)
             ]
-
-
-instance (GSet c, Show (Set c)) => Show (SomeDFA c) where
-    show (SomeDFA d) =
-        show d
