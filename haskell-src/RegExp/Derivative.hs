@@ -5,15 +5,13 @@
 -- [Symbolic Solving of Extended Regular Expression Inequalities](https://arxiv.org/abs/1410.3227).
 module RegExp.Derivative
     ( Word
-    -- * Tests
-    , nullable
-    , empty
-    , matches
-    , equivalent
-
     -- * Derivatives
     , derivative
     , partialDerivative
+
+    -- * Application of derivatives
+    , matches
+    , equivalent
 
     -- * Automata construction
     , allDerivatives
@@ -37,83 +35,7 @@ type Word c =
 
 
 
--- * Tests
-
--- | 'True' if and only if the regular expression can match the
--- empty string.
-nullable :: GSet c => RegExp c -> Bool
-nullable r =
-    case view r of
-        One ->
-            True
-
-        Plus r1 r2 ->
-            nullable r1 || nullable r2
-
-        Times r1 r2 ->
-            nullable r1 && nullable r2
-
-        Star _ ->
-            True
-
-        Literal _ ->
-            False
-
-
--- | 'True' if and only if the regular expression matches no strings.
-empty :: GSet c => RegExp c -> Bool
-empty r =
-    case view r of
-        One ->
-            False
-
-        Plus r1 r2 ->
-            empty r1 && empty r2
-
-        Times r1 r2 ->
-            empty r1 || empty r2
-
-        Star _ ->
-            False
-
-        Literal p ->
-            p == zero
-
-
--- | @r `matches` w@ if the regular expression @r@ accepts word @w@.
-matches :: GSet c => RegExp c -> Word c -> Bool
-matches r [] =
-    nullable r
-matches r (c : w) =
-    matches (derivative c r) w
-
-
--- | Two regular expressions are equivalent if only if they match
--- the same set of strings.
-equivalent :: forall c. GSet c => RegExp c -> RegExp c -> Bool
-equivalent =
-    helper Data.Set.empty
-    where
-        -- TODO: do we have to use union find instead? It will certainly be more
-        -- efficient, but we might in fact need it for completeness.
-        helper :: Data.Set.Set (RegExp c, RegExp c) -> RegExp c -> RegExp c -> Bool
-        helper context r1 r2 | (r1, r2) `Data.Set.member` context =
-            True
-        helper _ r1 r2 | nullable r1 /= nullable r2 =
-            False
-        helper context r1 r2 =
-            let
-                derivatives =
-                    [ (derivative c r1, derivative c r2)
-                    | p <- Data.Set.toList (next r1 `join` next r2)
-                    , Just c <- [choose p]
-                    ]
-            in
-                all (uncurry $ helper $ Data.Set.insert (r1, r2) context) derivatives
-
-
-
--- * Operations
+-- * Derivatives
 
 -- | Brzozowski derivative of a regular expression with respect to a character.
 -- @derivative c r@ matches a word @w@ if and only if @r@ matches @cw@.
@@ -172,6 +94,41 @@ partialDerivative c r =
         setTimes :: Data.Set.Set (RegExp c) -> RegExp c -> Data.Set.Set (RegExp c)
         setTimes s r =
             Data.Set.map (`rTimes` r) s
+
+
+
+-- * Applications
+
+-- | @r `matches` w@ if the regular expression @r@ accepts word @w@.
+matches :: GSet c => RegExp c -> Word c -> Bool
+matches r [] =
+    nullable r
+matches r (c : w) =
+    matches (derivative c r) w
+
+
+-- | Two regular expressions are equivalent if only if they match
+-- the same set of strings.
+equivalent :: forall c. GSet c => RegExp c -> RegExp c -> Bool
+equivalent =
+    helper Data.Set.empty
+    where
+        -- TODO: do we have to use union find instead? It will certainly be more
+        -- efficient, but we might in fact need it for completeness.
+        helper :: Data.Set.Set (RegExp c, RegExp c) -> RegExp c -> RegExp c -> Bool
+        helper context r1 r2 | (r1, r2) `Data.Set.member` context =
+            True
+        helper _ r1 r2 | nullable r1 /= nullable r2 =
+            False
+        helper context r1 r2 =
+            let
+                derivatives =
+                    [ (derivative c r1, derivative c r2)
+                    | p <- Data.Set.toList (next r1 `join` next r2)
+                    , Just c <- [choose p]
+                    ]
+            in
+                all (uncurry $ helper $ Data.Set.insert (r1, r2) context) derivatives
 
 
 

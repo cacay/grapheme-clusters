@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE ViewPatterns #-}
 
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -24,6 +24,10 @@ module RegExp.RegExp
     , view
     , hide
 
+    -- * Properties
+    , nullable
+    , empty
+
     -- * Combining regular expressions
     , rZero
     , rOne
@@ -33,20 +37,28 @@ module RegExp.RegExp
     , rLiteral
     ) where
 
+import Control.Exception.Base(assert)
+import Unsafe.Coerce(unsafeCoerce)
 
-import Control.Exception (assert)
-import qualified Data.List
-import qualified Data.Set
-import Data.Set (minView)
+import Data.Singletons
+import Data.Singletons.Decide
+import Data.Singletons.Prelude
+
+import Data.Set(Set)
+import qualified Data.Set as Set
+
+import Data.Either (isRight)
+import qualified Data.List as List
 import Data.String (IsString(..))
 
+import Data.GSet (GSet)
+import qualified Data.GSet as GSet
 import Data.Semiring (Semiring(..))
-import Data.GSet
 
 
 -- | Sets of characters from an alphabet 'c'.
 type CharacterClass c =
-    Set c
+    GSet.Set c
 
 
 -- | Regular expressions that support character classes over an alphabet
@@ -85,16 +97,48 @@ type CharacterClass c =
 -- prop> 0* = 1
 -- prop> 1* = 1
 --
+-- In addition, we keep regular expressions in strong star normal form
+-- which is described in
+-- [Simplifying Regular Expressions A Quantitative Perspective](https://pdfs.semanticscholar.org/1b6b/5843442a64523ccb7afd21eabec7881b4219.pdf).
+-- In practice, this means @*@ is only applied to expression that
+-- cannot match the empty word.
+--
 -- Brzozowski proved that normalizing with respect to ACI ensures
 -- there are only finitely many derivatives of a regular expression.
 -- So ACI is necessary for any algorithm that relies on taking repeated
 -- derivatives of regular expressions.
-newtype RegExp c =
-    RegExp (NormalizedRegExp c)
+data RegExp c where
+    RZero :: RegExp c
+    ROne  :: RegExp c
+    RNormalized :: (NormalizedRegExp c isUnion isSeq isNullable) -> RegExp c
 
-deriving instance GSet c => Eq (RegExp c)
-deriving instance (GSet c, Ord (Set c)) => Ord (RegExp c)
+instance GSet c => Eq (RegExp c) where
+    RZero == RZero =
+        True
+    ROne == ROne =
+        True
+    RNormalized r1 == RNormalized r2 =
+        r1 `hEq` r2
+    _ == _ =
+        False
 
+instance (GSet c, Ord (CharacterClass c)) => Ord (RegExp c) where
+    compare RZero RZero =
+        EQ
+    compare RZero _ =
+        LT
+    compare _ RZero =
+        GT
+
+    compare ROne ROne =
+        EQ
+    compare ROne _ =
+        LT
+    compare _ ROne =
+        GT
+
+    compare (RNormalized r1) (RNormalized r2) =
+        r1 `hCompare` r2
 
 -- | Nicer interface for inputting regular expression over 'Char'.
 instance IsString (RegExp Char) where
@@ -103,8 +147,11 @@ instance IsString (RegExp Char) where
 
 
 
--- | Standard syntax for regular expressions.
-data RegExpView r c where
+-- * Deconstructing regular expressions
+
+-- | Standard syntax for regular expressions. We omit @Zero@ since
+-- it can be encoded as @'Literal' 'zero'@.
+data RegExpView c r where
     -- | Match the empty string and nothing else.
     One :: RegExpView c r
 
@@ -121,51 +168,50 @@ data RegExpView r c where
     -- class might be empty, in which case this matches no strings.
     Literal :: CharacterClass c -> RegExpView c r
 
-
 deriving instance Functor (RegExpView c)
+
 
 
 -- | Expose the abstract type 'RegExp' as a 'RegExpView'.
 view :: forall c. GSet c => RegExp c -> RegExpView c (RegExp c)
-view (RegExp r) =
+view RZero =
+    Literal zero
+view ROne =
+    One
+view (RNormalized r) =
     view' r
     where
-        view' :: NormalizedRegExp c -> RegExpView c (RegExp c)
-        view' PZero =
-            Literal zero
+        view' :: NormalizedRegExp c isUnion isSeq isNullable
+              -> RegExpView c (RegExp c)
+        view' (NUnion p n s) | p /= zero, Set.null n, Set.null s =
+            Literal p
+        view' (NUnion p n s) | p /= zero =
+            nUnion p Set.empty Set.empty `Times` nUnion zero n s
+        view' (NUnion _ n s) | otherwise =
+            case (Set.minView n, Set.minView s) of
+                (Nothing, Nothing) ->
+                    error "impossible"
 
-        view' POne =
-            One
+                (Just (SubUnion r, n), _) ->
+                    RNormalized r `Times` nUnion zero n s
 
-        view' (PUnion p s) =
-            case s of
-                (minView -> Nothing) ->
-                    Literal p
+                (Nothing, Just (SubUnion r, s)) ->
+                    RNormalized r `Times` nUnion zero Set.empty s
 
-                (minView -> Just (r1, minView -> Nothing)) ->
-                    Plus (rLiteral p) (injectSubUnion r1)
+        view' (NUnionWithOne p s) =
+            ROne `Times` nUnion p Set.empty s
 
-                _ | p /= zero ->
-                    Plus (rLiteral p) (RegExp $ nUnion zero s)
+        view' (NSeq l) | Some1 (SubSeq r1) ::: (Some1 l')  <- nSeqView l
+                       , Some1 (SubSeq r2) ::: (Some1 l'') <- nSeqView l'
+                       , Nil <- nSeqView l'' =
+            RNormalized r1 `Times` RNormalized r2
+        view' (NSeq l) | Some1 (SubSeq r1) ::: Some1 l' <- nSeqView l =
+            RNormalized r1 `Times` RNormalized (NSeq l')
+        view' (NSeq l) | otherwise =
+            error "impossible"
 
-                (minView -> Just (r1, minView -> Just (r2, minView -> Nothing))) ->
-                    Plus (injectSubUnion r1) (injectSubUnion r2)
-
-                (minView -> Just (r1, s)) ->
-                    Plus (injectSubUnion r1) (RegExp $ nUnion zero s)
-
-                _ -> -- TODO: GHC is too dumb to see this match is complete
-                    undefined
-
-        view' (PSeq [r1, r2]) =
-            Times (injectSubSeq r1) (injectSubSeq r2)
-        view' (PSeq (r : l)) =
-            Times (injectSubSeq r) (RegExp $ nSeq l)
-        view' (PSeq []) =
-            undefined
-
-        view' (PStar r) =
-            Star (injectSubStar r)
+        view' (NStar r) =
+            Star (RNormalized r)
 
 
 -- | Pack the public view 'RegExpView' back into the abstract view 'RegExp'.
@@ -183,321 +229,672 @@ hide (Literal p) =
 
 
 
+-- * Properties
+
+-- | 'True' if and only if the regular expression can match the
+-- empty word.
+nullable :: GSet c => RegExp c -> Bool
+nullable RZero =
+    False
+nullable ROne =
+    True
+nullable (RNormalized r) =
+    isRight (nullableNormalized r)
+
+
+-- | 'True' if and only if the regular expression matches no words.
+empty :: RegExp c -> Bool
+empty RZero =
+    True
+empty _ =
+    False
+
+
+
 -- * Normalized regular expressions
 
--- | A type for regular expressions normalized according to the rewriting
--- rules in 'RegExp'. This way of writing regular expressions statically
--- ensures (almost) that expressions are normalized, that is, none of the
--- rewriting rules in 'RegExp' apply. There are certain side conditions we
--- cannot check statically. These are noted for individual constructors and
--- checked using smart constructors.
+-- | We define a type of /normalized regular expressions/ to help us
+-- statically ensure the properties described in 'RexExp'. Terms of this
+-- type denote expressions that
+-- 1. are fully normalized with respect to the rewriting rules in 'RegExp',
+-- 2. are in strong star normal form,
+-- 3. know whether they are nullable (i.e. we can determine in constant time
+--    whether they can match the empty word or not).
 --
--- The general idea is to use data types that intrinsically capture the
--- properties need. For example, instead of using binary unions, we define
--- unions over /sets/ of expressions since sets build in associativity,
--- commutativity, and idempotence. Similarly, we use lists for sequencing
--- so associativity is automatic. In addition, we put restrictions on
--- subexpressions (such as @0@ doesn't appear in a union), which further
--- regularizes the structure.
-type NormalizedRegExp c =
-    NZero :+: NOne :+: NUnion c :+: NSeq c :+: NStar c
-
-
-
--- | Normalized @0@.
-data NZero =
-    NZero
-
-
-deriving instance Eq NZero
-deriving instance Ord NZero
-
-
--- | Normalized @1@.
-data NOne =
-    NOne
-
-
-deriving instance Eq NOne
-deriving instance Ord NOne
-
-
--- | A normalized literal (character set) and/or a union of expressions. Two
--- things are happening here:
+-- (1) and (2) are direct requirements. (3) helps us specify when a regular
+-- expression is in star normal form. Additionally, being able to compute
+-- nullability in constant time speeds up derivative based algorithms.
 --
--- 1. We bundle character sets with unions because we want to ensure we
---    combine them using set union instead of the syntactic regular
---    expression union.
--- 2. We define union over sets so associativity, commutativity, and
---    idempotence are automatically enforced.
+-- To enforce these requirements, we use data structures that intrinsically
+-- capture the required properties. For example, instead of using binary
+-- unions, we define unions over /sets/ of subexpressions since sets capture
+-- associativity, commutativity, and idempotence. Similarly, we use lists
+-- for sequencing so we get associativity automatically.
 --
--- We dynamically check the following condition: for any @'NUnion' p s@,
+-- Normalized expressions are indexed based on whether the root constructor
+-- is a union or a sequence so we can statically disallow nesting unions
+-- under unions (since they can be combined into one) and similarly for
+-- sequencing. There is an additional index to track whether the expression
+-- is nullable.
 --
--- @p /= 'zero' || 'length' s >= 2@
---
--- This is to ensure that we do not have trivial unions.
---
--- Additionally, we do not allow nested unions (they can be merged into
--- the outer union), or nested zeros (they can be safely removed).
-data NUnion c =
-    NUnion (CharacterClass c) (Data.Set.Set (SubUnion c))
+-- Normalized expressions cannot encode the regular expressions that matches
+-- no words (i.e. @Zero@) or the regular expression that only matches the
+-- empty words (i.e. @One@). These are added by 'RegExp'. This is in line
+-- with the development in
+-- /Simplifying Regular Expressions A Quantitative Perspective/.
+data NormalizedRegExp c (isUnion :: Bool) (isSeq :: Bool) (isNullable :: Bool) where
+    -- | Union of a literal (a character set) and a set of subexpressions.
+    -- Note that we disallow standalone literal nodes under unions and
+    -- instead bundle them with the union nodes themselves to ensure we
+    -- combine literals using set union instead of syntactic regular expression
+    -- union. This gives an additional level of normalization.
+    --
+    -- We do not have a separate case for literals since they can be
+    -- represented as a union node with an empty set of subexpressions.
+    --
+    -- We keep nullable and strict (non-nullable) subexpressions separate to
+    -- satisfy requirement (3): a union node is nullable if the set of
+    -- nullable subexpressions is not empty. This is checked dynamically.
+    --
+    -- To satisfy (1) and (2), we require that for every @NUnion p n s@, the
+    -- following should hold:
+
+    -- @p /= zero || 'length' n + 'length' s >= 2@.
+    --
+    -- Additionally, 'NUnion' and 'NUnionWithOne' should not occur as
+    -- subexpressions since these can be hoisted up.
+    NUnion :: CharacterClass c
+           -> Set (SubUnion c True)
+           -> Set (SubUnion c False)
+           -> NormalizedRegExp c True False isNullable
+
+    -- | The empty word or a union. This corresponds to the @?@ constructor
+    -- from the paper, but generalized over a union of subexpressions
+    -- (as opposed to a single expression) so that expressions like @a? + b?@
+    -- get simplified to @(a + b)?@.
+    --
+    -- For every, @NUnionWithOne p s@ we require that
+    -- @p /= zero || 'length' s >= 1@ and @s@ does not contain 'NUnion' or
+    -- 'NUnionWithOne'.
+    NUnionWithOne :: CharacterClass c
+                  -> Set (SubUnion c False)
+                  -> NormalizedRegExp c True False True
 
 
--- | Expressions that can appear under a union.
-type SubUnion c =
-    NOne :+: NSeq c :+: NStar c
+    -- | Sequential composition of a list of subexpressions. Each cons node
+    -- in the list needs to store whether the sequential composition of that
+    -- and the following nodes are nullable or not in order to satisfy (3).
+    --
+    -- The list must contain at least two elements and 'NSeq' nodes cannot
+    -- appear as subexpression.
+    NSeq :: NSeq c isNullable
+         -> NormalizedRegExp c False True isNullable
+
+    -- | Iteration. The iterated expression cannot be nullable, but the
+    -- overall expression always is.
+    NStar :: NormalizedRegExp c isUnion isSeq False
+          -> NormalizedRegExp c False False True
 
 
-deriving instance GSet c => Eq (NUnion c)
-deriving instance (GSet c, Ord (Set c)) => Ord (NUnion c)
+-- | Normalized regular expressions that can appear under a union node.
+data SubUnion c (isNullable :: Bool) where
+    SubUnion :: !(NormalizedRegExp c False isSeq isNullable)
+             -> SubUnion c isNullable
 
 
--- | Turn a subexpression of a union node into a regular expression.
-injectSubUnion :: GSet c => SubUnion c -> RegExp c
-injectSubUnion (Inl NOne) =
-    RegExp $ nOne
-injectSubUnion (Inr (Inl (NSeq l))) =
-    RegExp $ nSeq l
-injectSubUnion (Inr (Inr (NStar r))) =
-    RegExp $ nStar r
+-- | Normalized regular expressions that can appear under a seq node.
+data SubSeq c (isNullable :: Bool) where
+    SubSeq :: !(NormalizedRegExp c isUnion False isNullable)
+           -> SubSeq c isNullable
 
 
--- | Normalized sequential composition of expressions. We use lists
--- to get associativity for free. Given @NSeq l@, we require (and
--- dynamically check) that @'length' l >= 2@.
---
--- Additionally, we do not allow nested zeros, ones, or sequential
--- compositions.
-data NSeq c =
-    NSeq [SubSeq c]
+-- | Sequential composition of a list of subexpressions. Each node
+-- in the sequence keeps track of whether the subsequence starting
+-- with that element is nullable.
+data NSeq c (isNullable :: Bool) where
+    -- | Empty list. Nullable since it corresponds to @One@.
+    NSeqNil :: NSeq c True
+
+    -- | Tack on a nullable subexpression. The result is nullable if
+    -- and only if the rest of the list is.
+    NSeqConsNullable :: Sing (isNullable :: Bool)
+                     -> SubSeq c True
+                     -> NSeq c isNullable
+                     -> NSeq c isNullable
+
+    -- | Tack on a strict (non-nullable) subexpression. The result
+    -- is always strict.
+    NSeqConsStrict :: SubSeq c False
+                   -> NSeq c isNullable
+                   -> NSeq c False
 
 
--- | Expressions that can appear under a sequence.
-type SubSeq c =
-    NUnion c :+: NStar c
+
+-- * Smart constructors to check invariants we cannot encode statically.
 
 
-deriving instance GSet c => Eq (NStar c)
-deriving instance (GSet c, Ord (Set c)) => Ord (NStar c)
-
-
--- | Turn a subexpression of a sequencing node into a regular expression.
-injectSubSeq :: GSet c => SubSeq c -> RegExp c
-injectSubSeq (Inl (NUnion p s)) =
-    RegExp $ nUnion p s
-injectSubSeq (Inr (NStar r)) =
-    RegExp $ nStar r
-
-
--- | Normalized iteration. The only difference from the usual definition
--- is we require the iterated expression to be a union or a sequential
--- composition.
-data NStar c =
-    NStar (SubStar c)
-
-
--- | Expressions that can appear under a star.
-type SubStar c =
-    NUnion c :+: NSeq c
-
-
-deriving instance GSet c => Eq (NSeq c)
-deriving instance (GSet c, Ord (Set c)) => Ord (NSeq c)
-
-
--- | Turn a subexpression of a star node into a regular expression.
-injectSubStar :: GSet c => SubStar c -> RegExp c
-injectSubStar (Inl (NUnion p s)) =
-    RegExp $ nUnion p s
-injectSubStar (Inr (NSeq l)) =
-    RegExp $ nSeq l
-
-
--- | Smart version of 'NZero'.
-nZero :: NZero :<: r => r
-nZero =
-    inj NZero
-
-
--- | Smart version of 'NOne'.
-nOne :: NOne :<: r => r
-nOne =
-    inj NOne
-
-
--- | Safe and smart version of 'NUnion'.
-nUnion :: (NUnion c :<: r, GSet c)
+-- | Compute the union of the given sets of subexpressions.
+-- This constructor is always safe: it will always construct
+-- a valid expression, and it will always "do the right thing".
+nUnion :: GSet c
        => CharacterClass c
-       -> Data.Set.Set (SubUnion c)
-       -> r
-nUnion p s =
-    assert (p /= zero || Data.Set.size s >= 2) $
-        inj (NUnion p s)
+       -> Set (SubUnion c True)
+       -> Set (SubUnion c False)
+       -> RegExp c
+nUnion p n s | p /= zero || Set.size n + Set.size s >= 2 =
+    if Set.null n then
+        RNormalized (nUnionStrict p s)
+    else
+        RNormalized (nUnionNullable p n s)
+nUnion _ n s | otherwise =
+    case (Set.lookupMin n, Set.lookupMin s) of
+        (Nothing, Nothing) ->
+            RZero
+
+        (Just (SubUnion r), Nothing) ->
+            RNormalized r
+
+        (Nothing, Just (SubUnion r)) ->
+            RNormalized r
+
+        (Just _, Just _) ->
+            error "impossible"
 
 
--- | Safe and smart version of 'NSeq'.
-nSeq :: NSeq c :<: r => [SubSeq c] -> r
+-- | Safe and smart constructor for 'NUnion' that always returns a
+-- nullable expression.
+nUnionNullable :: GSet c
+               => CharacterClass c
+               -> Set (SubUnion c True)
+               -> Set (SubUnion c False)
+               -> NormalizedRegExp c True False True
+nUnionNullable p n s =
+    assert (Set.size n > 0) $
+    assert (p /= zero || Set.size n + Set.size s >= 2) $
+    NUnion p n s
+
+
+-- | Safe and smart constructor for 'NUnion' that always returns a
+-- non-nullable expression.
+nUnionStrict :: GSet c
+             => CharacterClass c
+             -> Set (SubUnion c False)
+             -> NormalizedRegExp c True False False
+nUnionStrict p s =
+    assert (p /= zero || Set.size s >= 2) $
+    NUnion p Set.empty s
+
+
+-- | Safe and smart constructor for 'NUnionWithOne'.
+nUnionWithOne :: GSet c
+              => CharacterClass c
+              -> Set (SubUnion c False)
+              -> NormalizedRegExp c True False True
+nUnionWithOne p s =
+    assert (p /= zero || Set.size s >= 1) $
+    NUnionWithOne p s
+
+
+-- | Safe and smart constructor for 'NSeq'.
+nSeq :: GSet c
+     => NSeq c isNullable
+     -> NormalizedRegExp c False True isNullable
 nSeq l =
-    assert (length l >= 2) $
-        inj (NSeq l)
+    assert (isValid l) $
+    NSeq l
+    where
+        -- | Check that the list has at least two subexpressions.
+        isValid NSeqNil =
+            False
+        isValid (NSeqConsNullable _ _ NSeqNil) =
+            False
+        isValid (NSeqConsStrict _ NSeqNil) =
+            False
+        isValid _ =
+            True
 
 
--- | Smart version of 'NStar'
-nStar :: NStar c :<: r => SubStar c -> r
-nStar r =
-    inj (NStar r)
+-- | Alias for 'NStar' for uniformity.
+nStar :: GSet c
+      => NormalizedRegExp c isUnion isSeq False
+      -> NormalizedRegExp c False False True
+nStar =
+    NStar
 
 
 
--- * Convenient syntax for pattern matching on 'NormalizedRegExp's.
+-- * Working with normalized expressions
 
-pattern PZero      <- Inl NZero
-pattern POne       <- Inr (Inl NOne)
-pattern PUnion p s <- Inr (Inr (Inl (NUnion p s)))
-pattern PSeq l     <- Inr (Inr (Inr (Inl (NSeq l))))
-pattern PStar r    <- Inr (Inr (Inr (Inr (NStar r))))
+nullableNormalized :: GSet c
+                   => NormalizedRegExp c isUnion isSeq isNullable
+                   -> Either (isNullable :~: False) (isNullable :~: True)
+nullableNormalized (NUnion _ n _)=
+    if Set.null n then
+        Left (unsafeCoerce Refl)
+    else
+        Right (unsafeCoerce Refl)
+nullableNormalized (NUnionWithOne _ _) =
+    Right Refl
+nullableNormalized (NSeq l) =
+    nullableNSeq l
+nullableNormalized (NStar _) =
+    Right Refl
 
-{-# COMPLETE PZero, POne, PUnion, PSeq, PStar #-}
+
+nullableNSeq :: NSeq c isNullable
+             -> Either (isNullable :~: False) (isNullable :~: True)
+nullableNSeq NSeqNil =
+    Right Refl
+nullableNSeq (NSeqConsNullable SFalse _ _) =
+    Left Refl
+nullableNSeq (NSeqConsNullable STrue _ _) =
+    Right Refl
+nullableNSeq (NSeqConsStrict _ _) =
+    Left Refl
 
 
 
--- * Combining regular expressions
+-- | View 'NSeq' as a list.
+nSeqView :: NSeq c isNullable
+         -> ListView (Some1 (NSeq c)) (Some1 (SubSeq c))
+nSeqView NSeqNil =
+    Nil
+nSeqView (NSeqConsNullable _ h t) =
+    Some1 h ::: (Some1 t)
+nSeqView (NSeqConsStrict h t) =
+    Some1 h ::: (Some1 t)
+
+
+-- | Construct an 'NSeq' that contains a single subexpression.
+nSeqSingleton :: GSet c => SubSeq c isNullable -> Some1 (NSeq c)
+nSeqSingleton r@(SubSeq n) =
+    case nullableNormalized n of
+        Left Refl  ->
+            Some1 $ NSeqConsStrict r NSeqNil
+
+        Right Refl ->
+            Some1 $ NSeqConsNullable STrue r NSeqNil
+
+
+-- | Append two 'NSeq's.
+nSeqAppend :: NSeq c isNullable1
+           -> NSeq c isNullable2
+           -> NSeq c (isNullable1 && isNullable2)
+nSeqAppend NSeqNil l2 =
+    l2
+nSeqAppend (NSeqConsNullable SFalse h1 t1) l2 =
+    NSeqConsNullable SFalse h1 (nSeqAppend t1 l2)
+nSeqAppend (NSeqConsNullable STrue h1 t1) l2 =
+    case nullableNSeq l2 of
+        Left Refl ->
+            NSeqConsNullable SFalse h1 (nSeqAppend t1 l2)
+        Right Refl ->
+            NSeqConsNullable STrue h1 (nSeqAppend t1 l2)
+nSeqAppend (NSeqConsStrict h1 t1) l2 =
+    NSeqConsStrict h1 (nSeqAppend t1 l2)
+
+
+
+-- * Comparing normalized expressions
+
+-- GHC cannot derive 'Eq' and 'Ord' instances for normalized regular
+-- expressions because of all the existential quantification going
+-- on. Since we only care about ordering so we can put expression
+-- in sets, we define ordering on the underlying untyped terms. We
+-- do this efficiently by defining heterogeneous equality and comparison.
+
+-- | Heterogeneous equality.
+class HEq a b where
+    hEq :: a -> b -> Bool
+
+
+-- | Heterogeneous ordering.
+class HOrd a b where
+    hCompare :: a -> b -> Ordering
+
+
+instance GSet c => HEq (NormalizedRegExp c u1 s1 n1) (NormalizedRegExp c u2 s2 n2) where
+    hEq (NUnion p1 n1 s1) (NUnion p2 n2 s2) =
+        p1 == p2 && n1 == n2 && s1 == s2
+    hEq (NUnionWithOne p1 s1) (NUnionWithOne p2 s2) =
+        p1 == p2 && s1 == s2
+    hEq (NSeq l1) (NSeq l2) =
+        l1 `hEq` l2
+    hEq (NStar r1) (NStar r2) =
+        r1 `hEq` r2
+    hEq _ _ =
+        False
+
+instance GSet c => HEq (SubUnion c n1) (SubUnion c n2) where
+    hEq (SubUnion r1) (SubUnion r2) =
+        r1 `hEq` r2
+
+instance GSet c => HEq (SubSeq c n1) (SubSeq c n2) where
+    hEq (SubSeq r1) (SubSeq r2) =
+        r1 `hEq` r2
+
+instance GSet c => HEq (NSeq c n1) (NSeq c n2) where
+    hEq NSeqNil NSeqNil =
+        True
+    hEq (NSeqConsNullable n1 h1 t1) (NSeqConsNullable n2 h2 t2) =
+        fromSing n1 == fromSing n2 && h1 `hEq` h2 && t1 `hEq` t2
+    hEq (NSeqConsStrict h1 t1) (NSeqConsStrict h2 t2) =
+        h1 `hEq` h2 && t1 `hEq` t2
+    hEq _ _ =
+        False
+
+
+instance GSet c => Eq (NormalizedRegExp c isUnion isSeq isNullable) where
+    (==) = hEq
+
+instance GSet c => Eq (SubUnion c isNullable) where
+    (==) = hEq
+
+instance GSet c => Eq (SubSeq c isNullable) where
+    (==) = hEq
+
+instance GSet c => Eq (NSeq c isNullable) where
+    (==) = hEq
+
+
+
+instance (GSet c, Ord (CharacterClass c)) => HOrd (NormalizedRegExp c u1 s1 n1) (NormalizedRegExp c u2 s2 n2) where
+    hCompare (NUnion p1 n1 s1) (NUnion p2 n2 s2) =
+        p1 `compare` p2 <> n1 `compare` n2 <> s1 `compare` s2
+    hCompare (NUnion _ _ _) _ =
+        LT
+    hCompare _ (NUnion _ _ _) =
+        GT
+
+    hCompare (NUnionWithOne p1 s1) (NUnionWithOne p2 s2) =
+        p1 `compare` p2 <> s1 `compare` s2
+    hCompare (NUnionWithOne _ _) _ =
+        LT
+    hCompare _ (NUnionWithOne _ _) =
+        GT
+
+    hCompare (NSeq l1) (NSeq l2) =
+        l1 `hCompare` l2
+    hCompare (NSeq _) _ =
+        LT
+    hCompare _ (NSeq _) =
+        GT
+
+    hCompare (NStar r1) (NStar r2) =
+        r1 `hCompare` r2
+
+instance (GSet c, Ord (CharacterClass c)) => HOrd (SubUnion c n1) (SubUnion c n2) where
+    hCompare (SubUnion r1) (SubUnion r2) =
+        r1 `hCompare` r2
+
+instance (GSet c, Ord (CharacterClass c)) => HOrd (SubSeq c n1) (SubSeq c n2) where
+    hCompare (SubSeq r1) (SubSeq r2) =
+        r1 `hCompare` r2
+
+instance (GSet c, Ord (CharacterClass c)) => HOrd (NSeq c n1) (NSeq c n2) where
+    hCompare NSeqNil NSeqNil =
+        EQ
+    hCompare NSeqNil _ =
+        LT
+    hCompare _ NSeqNil =
+        GT
+
+    hCompare (NSeqConsNullable n1 h1 t1) (NSeqConsNullable n2 h2 t2) =
+        fromSing n1 `compare` fromSing n2 <> h1 `hCompare` h2 <> t1 `hCompare` t2
+    hCompare (NSeqConsNullable _ _ _) (NSeqConsStrict _ _) =
+        LT
+
+    hCompare (NSeqConsStrict h1 t1) (NSeqConsStrict h2 t2) =
+        h1 `hCompare` h2 <> t1 `hCompare` t2
+    hCompare (NSeqConsStrict _ _) (NSeqConsNullable _ _ _) =
+        GT
+
+
+instance (GSet c, Ord (CharacterClass c)) => Ord (NormalizedRegExp c isUnion isSeq isNullable) where
+    compare = hCompare
+
+instance (GSet c, Ord (CharacterClass c)) => Ord (SubUnion c isNullable) where
+    compare = hCompare
+
+instance (GSet c, Ord (CharacterClass c)) => Ord (SubSeq c isNullable) where
+    compare = hCompare
+
+instance (GSet c, Ord (CharacterClass c)) => Ord (NSeq c isNullable) where
+    compare = hCompare
+
+
+
+-- * Constructing and combining regular expressions
 
 -- | Regular expression that matches no strings.
 rZero :: RegExp c
 rZero =
-    RegExp nZero
+    RZero
 
 
 -- | Regular expression that matches the empty string and nothing else.
 rOne :: RegExp c
 rOne =
-    RegExp nOne
+    ROne
 
 
 -- | Regular expression that matches strings that either regular expression
 -- matches.
 rPlus :: forall c. GSet c => RegExp c -> RegExp c -> RegExp c
-rPlus (RegExp r1) (RegExp r2) =
-    RegExp $ rPlus' r1 r2
+rPlus RZero r2 =
+    r2
+rPlus r1 RZero =
+    r1
+
+rPlus ROne ROne =
+    ROne
+rPlus ROne result@(RNormalized r2) =
+    case nullableNormalized r2 of
+        Left Refl ->
+            case r2 of
+                NUnion p2 n2 s2 ->
+                    assert (Set.null n2) $
+                    RNormalized $ nUnionWithOne p2 s2
+
+                NSeq _ ->
+                    RNormalized $ nUnionWithOne zero (Set.singleton $ SubUnion r2)
+
+        Right Refl ->
+            result
+rPlus r1 ROne =
+    rPlus ROne r1
+
+rPlus (RNormalized r1) (RNormalized r2) =
+    rPlus' r1 r2
     where
-        rPlus' :: NormalizedRegExp c -> NormalizedRegExp c -> NormalizedRegExp c
-        rPlus' PZero r2 =
-            r2
-        
-        rPlus' r1 PZero =
-            r1
-        
-        rPlus' POne POne =
-            nOne
-        
-        rPlus' (PUnion p1 s1) POne =
-            nUnion p1 (Data.Set.insert nOne s1)
-        rPlus' (PUnion p1 s1) (PUnion p2 s2) =
-            nUnion (p1 <+> p2) (Data.Set.union s1 s2)
-        rPlus' (PUnion p1 s1) (PSeq l) =
-            nUnion p1 (Data.Set.insert (nSeq l) s1)
-        rPlus' (PUnion p1 s1) (PStar r) =
-            nUnion p1 (Data.Set.insert (nStar r) s1)
-        
-        rPlus' r1 r2@(PUnion _ _) =
+        rPlus' :: NormalizedRegExp c isUnion1 isSeq1 isNullable1
+               -> NormalizedRegExp c isUnion2 isSeq2 isNullable2
+               -> RegExp c
+        rPlus' (NUnion p1 n1 s1) (NUnion p2 n2 s2) =
+            nUnion (p1 <+> p2) (Set.union n1 n2) (Set.union s1 s2)
+        rPlus' (NUnion p1 n1 s1) (NUnionWithOne p2 s2) | Set.null n1 =
+            RNormalized $
+                nUnionWithOne (p1 <+> p2) (Set.union s1 s2)
+        rPlus' (NUnion p1 n1 s1) (NUnionWithOne p2 s2) | otherwise =
+            RNormalized $
+                nUnionNullable (p1 <+> p2) n1 (Set.union s1 s2)
+        rPlus' (NUnion p1 n1 s1) r2@(NSeq _) =
+            case nullableNormalized r2 of
+                Left Refl ->
+                    nUnion p1 n1 (Set.insert (SubUnion r2) s1)
+
+                Right Refl ->
+                    nUnion p1 (Set.insert (SubUnion r2) n1) s1
+        rPlus' (NUnion p1 n1 s1) r2@(NStar _) =
+            nUnion p1 (Set.insert (SubUnion r2) n1) s1
+        rPlus' r1 r2@(NUnion _ _ _) =
             rPlus' r2 r1
-        
-        rPlus' (PSeq l1) POne =
-            nUnion zero (Data.Set.fromList [nSeq l1, nOne :: SubUnion c])
-        rPlus' r1@(PSeq _) r2@(PSeq _) | r1 == r2 =
-            r1
-        rPlus' r1@(PSeq l1) r2@(PSeq l2) | otherwise =
-            nUnion zero (Data.Set.fromList [nSeq l1, nSeq l2 :: SubUnion c])
-        rPlus' (PSeq l1) (PStar r2) =
-            nUnion zero (Data.Set.fromList [nSeq l1, nStar r2 :: SubUnion c])
-        
-        rPlus' r1 r2@(PSeq _) =
+
+        rPlus' (NUnionWithOne p1 s1) (NUnionWithOne p2 s2) =
+            RNormalized $
+                nUnionWithOne (p1 <+> p2) (Set.union s1 s2)
+        rPlus' (NUnionWithOne p1 s1) r2@(NSeq _) =
+            case nullableNormalized r2 of
+                Left Refl ->
+                    RNormalized $
+                        nUnionWithOne p1 (Set.insert (SubUnion r2) s1)
+
+                Right Refl ->
+                    nUnion p1 (Set.singleton $ SubUnion r2) s1
+        rPlus' (NUnionWithOne p1 s1) r2@(NStar _) =
+            nUnion p1 (Set.singleton $ SubUnion r2) s1
+        rPlus' r1 r2@(NUnionWithOne _ _) =
             rPlus' r2 r1
-        
-        rPlus' (PStar r1) POne =
-            -- Star always contains the empty string, so we could optimize
-            -- this case by throwing away the @1@. We won't do so, however,
-            -- since we want to stick to the interface.
-            nUnion zero (Data.Set.fromList [nStar r1, nOne :: SubUnion c])
-        rPlus' r1@(PStar _) r2@(PStar _) | r1 == r2 =
-            r1
-        rPlus' (PStar r1) (PStar r2) | otherwise  =
-            nUnion zero (Data.Set.fromList [nStar r1, nStar r2 :: SubUnion c])
-        rPlus' r1 r2@(PStar _) =
-            rPlus' r2 r1
+
+        rPlus' r1@(NSeq _) r2@(NSeq _) =
+            rPlusNotUnion r1 r2
+        rPlus' r1@(NSeq _) r2@(NStar _) =
+            rPlusNotUnion r1 r2
+        rPlus' r1@(NStar _) r2@(NSeq _) =
+            rPlusNotUnion r1 r2
+        rPlus' r1@(NStar _) r2@(NStar _) =
+            rPlusNotUnion r1 r2
+
+
+        rPlusNotUnion :: NormalizedRegExp c False isSeq1 isNullable1
+                      -> NormalizedRegExp c False isSeq2 isNullable2
+                      -> RegExp c
+        rPlusNotUnion r1 r2 | r1 `hEq` r2 =
+            RNormalized r1
+        rPlusNotUnion r1 r2 | otherwise  =
+            case (nullableNormalized r1, nullableNormalized r2) of
+                (Right Refl, Right Refl) ->
+                    RNormalized $
+                        nUnionNullable zero (Set.fromList [SubUnion r1, SubUnion r2]) Set.empty
+
+                (Right Refl, Left Refl) ->
+                    RNormalized $
+                        nUnionNullable zero (Set.singleton $ SubUnion r1) (Set.singleton $ SubUnion r2)
+
+                (Left Refl, Right Refl) ->
+                    RNormalized $
+                        nUnionNullable zero (Set.singleton $ SubUnion r2) (Set.singleton $ SubUnion r1)
+
+                (Left Refl, Left Refl) ->
+                    RNormalized $
+                        nUnionStrict zero (Set.fromList [SubUnion r1, SubUnion r2])
 
 
 -- | Regular expression that matches the first expression followed
 -- by the second.
 rTimes :: forall c. GSet c => RegExp c -> RegExp c -> RegExp c
-rTimes (RegExp r1) (RegExp r2) =
-    RegExp $ rTimes' r1 r2
+rTimes RZero _ =
+    RZero
+rTimes _ RZero =
+    RZero
+
+rTimes ROne r2 =
+    r2
+rTimes r1 ROne =
+    r1
+
+rTimes (RNormalized r1) (RNormalized r2) =
+    case (isSeq r1, isSeq r2) of
+        (Left Refl, Left Refl) ->
+            case (nSeqSingleton $ SubSeq r1, nSeqSingleton $ SubSeq r2) of
+                (Some1 l1, Some1 l2) ->
+                    RNormalized $ NSeq (l1 `nSeqAppend` l2)
+
+        (Right Refl, Left Refl) | NSeq l1 <- r1 ->
+            case nSeqSingleton (SubSeq r2) of
+                Some1 l2 ->
+                    RNormalized $ NSeq (l1 `nSeqAppend` l2)
+
+        (Left Refl, Right Refl) | NSeq l2 <- r2 ->
+            case nSeqSingleton (SubSeq r1) of
+                Some1 l1 ->
+                    RNormalized $ NSeq (l1 `nSeqAppend` l2)
+
+        (Right Refl, Right Refl) | NSeq l1 <- r1
+                                 , NSeq l2 <- r2 ->
+            RNormalized $ NSeq (l1 `nSeqAppend` l2)
     where
-        rTimes' :: NormalizedRegExp c -> NormalizedRegExp c -> NormalizedRegExp c
-        rTimes' PZero _ =
-            nZero
-        rTimes' _ PZero =
-            nZero
-        rTimes' POne r2 =
-            r2
-        rTimes' r1 POne =
-            r1
-        rTimes' (PUnion p1 s1) (PUnion p2 s2) =
-            nSeq [nUnion p1 s1, nUnion p2 s2 :: SubSeq c]
-        rTimes' (PUnion p1 s1) (PSeq l2) =
-            nSeq $ (nUnion p1 s1 :: SubSeq c) : l2
-        rTimes' (PUnion p1 s1) (PStar r2) =
-            nSeq [nUnion p1 s1, nStar r2 :: SubSeq c]
-        
-        rTimes' (PSeq l1) (PUnion p2 s2) =
-            nSeq $ l1 ++ [nUnion p2 s2 :: SubSeq c]
-        rTimes' (PSeq l1) (PSeq l2) =
-            nSeq (l1 ++ l2)
-        rTimes' (PSeq l1) (PStar r2) =
-            nSeq $ l1 ++ [nStar r2 :: SubSeq c]
-        
-        rTimes' (PStar r1) (PUnion p2 s2) =
-            nSeq [nStar r1, nUnion p2 s2 :: SubSeq c]
-        rTimes' (PStar r1) (PSeq l2) =
-            nSeq $ (nStar r1 :: SubSeq c) : l2
-        rTimes' (PStar r1) (PStar r2) =
-            nSeq [nStar r1, nStar r2 :: SubSeq c]
+        isSeq :: NormalizedRegExp c isUnion isSeq isNullable
+                 -> Either (isSeq :~: False) (isSeq :~: True)
+        isSeq (NUnion _ _ _) =
+            Left Refl
+        isSeq (NUnionWithOne _ _) =
+            Left Refl
+        isSeq (NSeq _) =
+            Right Refl
+        isSeq (NStar _) =
+            Left Refl
 
 
 -- | Regular expression that matches zero or more copies of the given
 -- expression.
 rStar :: forall c. GSet c => RegExp c -> RegExp c
-rStar (RegExp r) =
-    RegExp $ rStar' r
+rStar RZero =
+    ROne
+rStar ROne =
+    ROne
+rStar r@(RNormalized (NStar _)) = -- Optimize a common case
+    r
+rStar (RNormalized r) =
+    case nullableNormalized r of
+        Left Refl ->
+            RNormalized $ nStar r
+
+        Right Refl | (p, s) <- removeOne r ->
+            if p /= zero || Set.size s >= 2 then
+                RNormalized $ nStar (nUnionStrict p s)
+            else
+                assert (p == zero && Set.size s == 1) $
+                case Set.findMin s of
+                    SubUnion r ->
+                        RNormalized $ nStar r
     where
-        rStar' :: NormalizedRegExp c -> NormalizedRegExp c
-        rStar' PZero =
-            nOne
-        rStar' POne =
-            nOne
-        rStar' (PUnion p s) =
-            nStar (nUnion p s :: SubStar c)
-        rStar' (PSeq l) =
-            nStar (nSeq l :: SubStar c)
-        rStar' r@(PStar _) =
-            r
+        -- | If @removeOne r = r'@, then @r* = (uncurry nUnionStrict r')*@.
+        removeOne :: NormalizedRegExp c isUnion isSeq True
+                  -> (CharacterClass c, Set (SubUnion c False))
+        removeOne (NUnion p n s) =
+            List.foldl' merge (p, s) n'
+            where
+                n' = fmap (\(SubUnion r) -> removeOne r) (Set.toList n)
+        removeOne (NUnionWithOne p s) =
+            (p, s)
+        removeOne (NSeq NSeqNil) =
+            (zero, Set.empty)
+        removeOne (NSeq (NSeqConsNullable STrue (SubSeq r) t)) =
+            removeOne r `merge` removeOne (NSeq t)
+        removeOne (NStar (NUnion p n s)) =
+            assert (Set.null n) $
+            (p, s)
+        removeOne (NStar r@(NSeq l)) =
+            (zero, Set.singleton (SubUnion  r))
+
+        -- | Combine two strict union components.
+        merge :: (CharacterClass c, Set (SubUnion c False))
+              -> (CharacterClass c, Set (SubUnion c False))
+              -> (CharacterClass c, Set (SubUnion c False))
+        merge (p1, s1) (p2, s2) =
+            (p1 <+> p2, s1 `Set.union` s2)
 
 
 -- | Regular expression that matches single character strings picked
 -- from the given character class.
 rLiteral :: forall c. GSet c => CharacterClass c -> RegExp c
 rLiteral p | p == zero =
-    RegExp nZero
+    RZero
 rLiteral p | otherwise =
-    RegExp $ nUnion p Data.Set.empty
-
+    RNormalized $ NUnion p Set.empty Set.empty
 
 
 -- * Printing
 
 instance (GSet c, Show (CharacterClass c)) => Show (RegExp c) where
-    showsPrec d (RegExp r) =
+    showsPrec d RZero =
+        showString "{}"
+
+    showsPrec d ROne =
+        showString "<>"
+
+    showsPrec d (RNormalized r) =
         showsPrec d r
 
 
@@ -506,109 +903,87 @@ instance (GSet c, Show (CharacterClass c)) => Show (RegExpView c (RegExp c)) whe
         showsPrec d (hide r)
 
 
-instance Show NZero where
-    show NZero =
-        "{}"
+instance (GSet c, Show (CharacterClass c)) => Show (NormalizedRegExp c isUnion isSeq isNullable) where
+    showsPrec d (NUnion p n s) =
+        showUnion d p (n' ++ s')
+        where
+            n' =
+                fmap (flip showsPrec) (Set.toList n)
 
+            s' =
+                fmap (flip showsPrec) (Set.toList s)
 
-instance Show NOne where
-    show NOne =
-        "<>"
+    showsPrec d (NUnionWithOne p s) =
+        showUnion d p (flip showsPrec (ROne :: RegExp c) : s')
+        where
+            s' =
+                fmap (flip showsPrec) (Set.toList s)
 
-
-instance (GSet c, Show (CharacterClass c)) => Show (NUnion c) where
-    showsPrec d (NUnion p s) =
-        let
-            unionPrec = 6
-
-            literal =
-                if p == zero then
-                    []
-                else
-                    [showsPrec unionPrec p]
-
-            elements = length literal + Data.Set.size s
-        in
-            showParen (d > unionPrec && elements > 1) $
-                intercalate
-                    (showString " + ")
-                    (literal ++ map (showsPrec unionPrec) (Data.Set.toList s))
-
-
-instance (GSet c, Show (CharacterClass c)) => Show (NSeq c) where
     showsPrec d (NSeq l) =
-        let
+        showParen (d > seqPrec) $
+            intercalate (showString "#") (toList l)
+        where
             seqPrec = 7
-        in
-            showParen (d > seqPrec) $
-                intercalate (showString "#") (map (showsPrec seqPrec) l)
 
+            toList :: NSeq c n -> [ShowS]
+            toList NSeqNil =
+                []
+            toList (NSeqConsNullable _ h t) =
+                showsPrec seqPrec h : toList t
+            toList (NSeqConsStrict h t) =
+                showsPrec seqPrec h : toList t
 
-instance (GSet c, Show (CharacterClass c)) => Show (NStar c) where
     showsPrec d (NStar r) =
-        let
+        showParen (d > starPrec) $
+            showsPrec starPrec r . showString "*"
+        where
             starPrec = 8
-        in
-            showParen (d > starPrec) $
-                showsPrec starPrec r . showString "*"
+
+instance (GSet c, Show (CharacterClass c)) => Show (SubUnion c isNullable) where
+    showsPrec d (SubUnion r) =
+        showsPrec d r
+
+instance (GSet c, Show (CharacterClass c)) => Show (SubSeq c isNullable) where
+    showsPrec d (SubSeq r) =
+        showsPrec d r
+
+
+-- | Behavior common to showing 'NUnion' and 'NUnionWithOne'.
+showUnion :: (GSet c, Show (CharacterClass c))
+          => Int
+          -> CharacterClass c
+          -> [Int -> ShowS]
+          -> ShowS
+showUnion d p l =
+    showParen (d > unionPrec && numElements > 1) $
+        intercalate (showString " + ") (literal ++ map ($ unionPrec) l)
+    where
+        unionPrec = 6
+
+        literal =
+            if p == zero then
+                []
+            else
+                [showsPrec unionPrec p]
+
+        numElements = length literal + length l
+
 
 
 -- | Combine a list of string builders using another as a separator.
 intercalate :: ShowS -> [ShowS] -> ShowS
 intercalate sep l =
-    foldr (.) id (Data.List.intersperse sep l)
+    foldr (.) id (List.intersperse sep l)
 
 
+-- * Helpers
 
--- * Lightweight data types à la carte
-
--- | Sum of two types. Essentially 'Either' with a different identity.
-data f :+: g
-    = Inl f
-    | Inr g
-
-infixr 6 :+:
+-- | Existentially quantify a single boolean argument.
+data Some1 (f :: Bool -> *) where
+    Some1 :: !(f b) -> Some1 f
 
 
-deriving instance (Eq f, Eq g) => Eq (f :+: g)
-
-deriving instance (Ord f, Ord g) => Ord (f :+: g)
-
-
-instance (Show f, Show g) => Show (f :+: g) where
-    -- | We don't display tags.
-    showsPrec d (Inl f) =
-        showsPrec d f
-    showsPrec d (Inr g) =
-        showsPrec d g
-
-
--- | Determine when a type @sub@ can be injected into a type @sup@.
-class sub :<: sup where
-    inj :: sub -> sup
-
-    proj :: sup -> Maybe sub
-
-
-instance f :<: f where
-    inj = id
-
-    proj = Just
-
-
-instance {-# OVERLAPS #-} f :<: (f :+: g) where
-    inj = Inl
-
-    proj (Inl f) =
-        Just f
-    proj (Inr _) =
-        Nothing
-
-
-instance f :<: g => f :<: (h :+: g) where
-    inj = Inr . inj
-
-    proj (Inl _) =
-        Nothing
-    proj (Inr g) =
-        proj g
+-- | Useful for defining views that look like lists.
+data ListView c e
+    = Nil
+    | e ::: c
