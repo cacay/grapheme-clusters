@@ -30,6 +30,9 @@ library
                          Data.GSet
                          Data.Semiring
 
+                         Segmentation
+                         GraphemeClusterBreak
+
   other-modules:         SparseVector
                          SparseMatrix
                          DFA
@@ -54,6 +57,7 @@ library
                          FlexibleInstances
                          FlexibleContexts
                          UndecidableInstances
+                         OverloadedLists
 
   ghc-options:           -fwarn-incomplete-patterns
                          -fwarn-unused-imports

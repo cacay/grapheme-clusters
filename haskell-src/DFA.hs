@@ -156,7 +156,7 @@ regexp d =
 
 
 -- | Convert a regular expression to a DFA.
-fromRegExp :: forall c. (GSet c) => RegExp c -> SomeDFA c
+fromRegExp :: forall c. GSet c => RegExp c -> SomeDFA c
 fromRegExp r =
     case toSing (fromIntegral $ Data.Set.size derivatives) of
         SomeSing (s :: SNat n) ->

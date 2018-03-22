@@ -4,6 +4,7 @@
 module RegExp.Operations
     ( intersection
     , complement
+    , difference
     ) where
 
 
@@ -17,7 +18,7 @@ import RegExp.RegExp
 import Data.GSet
 
 
--- | A regular expression that accepts words both given expressions accept
+-- | Regular expression that accepts words both expressions accept.
 intersection :: forall c. GSet c => RegExp c -> RegExp c -> RegExp c
 intersection r1 r2 =
     case (DFA.fromRegExp r1, DFA.fromRegExp r2) of
@@ -26,9 +27,17 @@ intersection r1 r2 =
             DFA.regexp $ DFA.intersection d1 d2
 
 
--- | A regular expression that accepts words the given expression doesn't.
+-- | Regular expression that accepts words given expression doesn't.
 complement :: GSet c => RegExp c -> RegExp c
 complement r =
     case DFA.fromRegExp r of
         DFA.SomeDFA d ->
             DFA.regexp $ DFA.complement d
+
+
+-- | Regular expression that accepts words the first expression does but
+-- the second doesn't.
+difference :: GSet c => RegExp c -> RegExp c -> RegExp c
+difference r1 r2 =
+    -- TODO: implement directly
+    r1 `intersection` complement r2

@@ -10,9 +10,12 @@ module Data.GSet
     ) where
 
 import Prelude hiding (and, or)
-import Data.Function (on)
-import qualified Data.Set
 import Data.String (IsString(..))
+import GHC.Exts (IsList(..))
+
+import Data.Function (on)
+import Data.List (intercalate)
+import qualified Data.Set
 
 import Data.BooleanAlgebra (BooleanAlgebra(..))
 import Data.Semiring (Semiring(..), DetectableZero(..))
@@ -132,13 +135,40 @@ instance IsString (FiniteSet Char) where
         These . Data.Set.fromList
 
 
-instance Show (FiniteSet Char) where
+-- | Allows us to write finite sets as lists.
+instance (Bounded a, Enum a, Ord a) => IsList (FiniteSet a) where
+    type (Item (FiniteSet a)) = a
+
+    fromList =
+        These . Data.Set.fromList
+
+    -- | We can list all elements in a finite or cofinite subset of
+    -- a finite type. For infinite types, size of cofinite subsets
+    -- is infinite, so this is not possible.
+    toList (These s) =
+        Data.Set.toList s
+    toList (ComplementOf s) =
+        [a | a <- [minBound..maxBound], Data.Set.notMember a s]
+
+
+
+{-
+instance {-# OVERLAPS #-} Show (FiniteSet Char) where
     show (These s) =
         "{" ++ Data.Set.toList s ++ "}"
     show (ComplementOf s) | Data.Set.null s =
         "."
     show (ComplementOf s) =
         "~" ++ "{" ++ Data.Set.toList s ++ "}"
+-}
+
+instance Show a => Show (FiniteSet a) where
+    show (These s) =
+        "{" ++ intercalate "," (map show $ Data.Set.toList s) ++ "}"
+    show (ComplementOf s) | Data.Set.null s =
+        "."
+    show (ComplementOf s) =
+        "~{" ++ intercalate "," (map show $ Data.Set.toList s) ++ "}"
 
 
 -- | Set containing no elements.
@@ -196,13 +226,3 @@ size (These s) =
     Data.Set.size s
 size (ComplementOf s) =
     sizeOfType (undefined :: a) - Data.Set.size s
-
-
--- | We can list all elements in a finite or cofinite subset of
--- a finite type. For infinite types, size of cofinite subsets
--- is infinite, so this is not possible.
-toList :: (Bounded a, Enum a, Ord a) => FiniteSet a -> [a]
-toList (These s) =
-    Data.Set.toList s
-toList (ComplementOf s) =
-    [a | a <- [minBound..maxBound], Data.Set.notMember a s]
