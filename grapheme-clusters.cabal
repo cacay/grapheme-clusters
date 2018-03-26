@@ -43,7 +43,8 @@ library
                          containers,
                          -- semiring-num,
                          singletons,
-                         finite-typelits
+                         finite-typelits,
+                         QuickCheck
 
   default-extensions:    ScopedTypeVariables
                          OverloadedStrings

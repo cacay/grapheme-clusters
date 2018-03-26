@@ -55,6 +55,8 @@ import Data.GSet (GSet)
 import qualified Data.GSet as GSet
 import Data.Semiring (Semiring(..))
 
+import Test.QuickCheck
+
 
 -- | Sets of characters from an alphabet 'c'.
 type CharacterClass c =
@@ -186,20 +188,20 @@ view (RNormalized r) =
         view' (NUnion p n s) | p /= zero, Set.null n, Set.null s =
             Literal p
         view' (NUnion p n s) | p /= zero =
-            nUnion p Set.empty Set.empty `Times` nUnion zero n s
+            nUnion p Set.empty Set.empty `Plus` nUnion zero n s
         view' (NUnion _ n s) | otherwise =
             case (Set.minView n, Set.minView s) of
                 (Nothing, Nothing) ->
                     error "impossible"
 
                 (Just (SubUnion r, n), _) ->
-                    RNormalized r `Times` nUnion zero n s
+                    RNormalized r `Plus` nUnion zero n s
 
                 (Nothing, Just (SubUnion r, s)) ->
-                    RNormalized r `Times` nUnion zero Set.empty s
+                    RNormalized r `Plus` nUnion zero Set.empty s
 
         view' (NUnionWithOne p s) =
-            ROne `Times` nUnion p Set.empty s
+            ROne `Plus` nUnion p Set.empty s
 
         view' (NSeq l) | Some1 (SubSeq r1) ::: (Some1 l')  <- nSeqView l
                        , Some1 (SubSeq r2) ::: (Some1 l'') <- nSeqView l'
@@ -907,17 +909,15 @@ instance (GSet c, Show (CharacterClass c)) => Show (NormalizedRegExp c isUnion i
     showsPrec d (NUnion p n s) =
         showUnion d p (n' ++ s')
         where
-            n' =
-                fmap (flip showsPrec) (Set.toList n)
-
-            s' =
-                fmap (flip showsPrec) (Set.toList s)
+            n' = fmap Some1 (Set.toList n)
+            s' = fmap Some1 (Set.toList s)
 
     showsPrec d (NUnionWithOne p s) =
-        showUnion d p (flip showsPrec (ROne :: RegExp c) : s')
+        showParen (d > unionWithOnePrec) $
+            showUnion unionWithOnePrec p s' . showString "?"
         where
-            s' =
-                fmap (flip showsPrec) (Set.toList s)
+            unionWithOnePrec = 8
+            s' = fmap Some1 (Set.toList s)
 
     showsPrec d (NSeq l) =
         showParen (d > seqPrec) $
@@ -952,19 +952,25 @@ instance (GSet c, Show (CharacterClass c)) => Show (SubSeq c isNullable) where
 showUnion :: (GSet c, Show (CharacterClass c))
           => Int
           -> CharacterClass c
-          -> [Int -> ShowS]
+          -> [Some1 (SubUnion c)]
           -> ShowS
 showUnion d p l =
     showParen (d > unionPrec && numElements > 1) $
-        intercalate (showString " + ") (literal ++ map ($ unionPrec) l)
+        intercalate (showString " + ") (literal ++ map showSub l)
     where
         unionPrec = 6
+
+        prec =
+            if numElements > 1 then unionPrec else d
+
+        showSub (Some1 r) =
+            showsPrec prec r
 
         literal =
             if p == zero then
                 []
             else
-                [showsPrec unionPrec p]
+                [showsPrec prec p]
 
         numElements = length literal + length l
 
@@ -987,3 +993,60 @@ data Some1 (f :: Bool -> *) where
 data ListView c e
     = Nil
     | e ::: c
+
+
+
+-- * Testing
+
+instance (GSet c, Arbitrary (CharacterClass c)) => Arbitrary (RegExp c) where
+    arbitrary = do
+        d <- choose (0, 14)
+        arbitraryWithDepth d
+        where
+            -- | Arbitrary regular expression with the given depth.
+            arbitraryWithDepth :: Int -> Gen (RegExp c)
+            arbitraryWithDepth 0 =
+                oneof [zero, one, literal]
+            arbitraryWithDepth n =
+                oneof [plus (n - 1), times (n - 1), star (n - 1)]
+
+            zero :: Gen (RegExp c)
+            zero =
+                return rZero
+
+            one :: Gen (RegExp c)
+            one =
+                return rOne
+
+            plus :: Int -> Gen (RegExp c)
+            plus d = do
+                l <- arbitraryWithDepth d
+                r <- arbitraryWithDepth d
+                return (l `rPlus` r)
+
+            times :: Int -> Gen (RegExp c)
+            times d = do
+                l <- arbitraryWithDepth d
+                r <- arbitraryWithDepth d
+                return (l `rTimes` r)
+
+            star :: Int -> Gen (RegExp c)
+            star d = do
+                r <- arbitraryWithDepth d
+                return (rStar r)
+
+            literal :: Gen (RegExp c)
+            literal = do
+                p <- arbitrary
+                return (rLiteral p)
+
+    shrink r =
+        case view r of
+            Plus r1 r2 ->
+                [r1, r2]
+            Times r1 r2 ->
+                [r1, r2]
+            Star r ->
+                [r]
+            _ ->
+                []

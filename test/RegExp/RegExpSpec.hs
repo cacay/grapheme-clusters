@@ -1,3 +1,6 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module RegExp.RegExpSpec (spec) where
 
@@ -27,17 +30,17 @@ spec = do
         it "does not match non-empty strings" $ do
             property $ \c (w :: String) -> (rZero `matches` (c : w)) `shouldBe` False
 
-    describe "times" $ do
-        it "matches when both subexpressions match in order" $ do
-            let r1 = "abc"
-            let r2 = "def"
-            (rTimes r1 r2 `matches` "af") `shouldBe` True
-
     describe "plus" $ do
         it "matches when either subexpression matches" $ do
             let r1 = "abc"
             let r2 = "def"
             (rPlus r1 r2 `matches` "a") `shouldBe` True
+
+    describe "times" $ do
+        it "matches when both subexpressions match in order" $ do
+            let r1 = "abc"
+            let r2 = "def"
+            (rTimes r1 r2 `matches` "af") `shouldBe` True
 
     describe "star" $ do
         it "matches the empty string" $ do
@@ -53,3 +56,8 @@ spec = do
             (rLiteral "ab" `matches` "b") `shouldBe` True
         it "does not match characters not in the class" $ do
             (rLiteral "ab" `matches` "c") `shouldBe` False
+
+
+    describe "hide" $ do
+        it "is the inverse of view" $ do
+            property $ \(r :: RegExp Char) -> hide (view r) `shouldBe` r

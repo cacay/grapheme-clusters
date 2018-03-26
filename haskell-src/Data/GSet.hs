@@ -20,6 +20,8 @@ import qualified Data.Set
 import Data.BooleanAlgebra (BooleanAlgebra(..))
 import Data.Semiring (Semiring(..), DetectableZero(..))
 
+import Test.QuickCheck
+
 
 -- | Sets over a type @a@.
 class (BooleanAlgebra (Set a), DetectableZero (Set a), Ord (Set a)) => GSet a where
@@ -226,3 +228,23 @@ size (These s) =
     Data.Set.size s
 size (ComplementOf s) =
     sizeOfType (undefined :: a) - Data.Set.size s
+
+
+
+-- * Testing
+
+instance (Arbitrary a, Ord a) => Arbitrary (FiniteSet a) where
+    arbitrary = do
+        complemented <- arbitrary
+        set <- arbitrary
+        case complemented of
+            False ->
+                return (These set)
+
+            True ->
+                return (ComplementOf set)
+
+    shrink (These s) =
+        fmap These (shrink s)
+    shrink (ComplementOf s) =
+        fmap These (shrink s) ++ fmap ComplementOf (shrink s)
