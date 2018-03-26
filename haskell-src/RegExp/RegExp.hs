@@ -55,7 +55,8 @@ import Data.GSet (GSet)
 import qualified Data.GSet as GSet
 import Data.Semiring (Semiring(..))
 
-import Test.QuickCheck
+import Test.QuickCheck as QuickCheck
+import Test.SmallCheck.Series as SmallCheck
 
 
 -- | Sets of characters from an alphabet 'c'.
@@ -411,7 +412,7 @@ nUnionNullable :: GSet c
                -> Set (SubUnion c False)
                -> NormalizedRegExp c True False True
 nUnionNullable p n s =
-    assert (Set.size n > 0) $
+    assert (not $ Set.null n) $
     assert (p /= zero || Set.size n + Set.size s >= 2) $
     NUnion p n s
 
@@ -643,13 +644,13 @@ instance (GSet c, Ord (CharacterClass c)) => HOrd (NSeq c n1) (NSeq c n2) where
 
     hCompare (NSeqConsNullable n1 h1 t1) (NSeqConsNullable n2 h2 t2) =
         fromSing n1 `compare` fromSing n2 <> h1 `hCompare` h2 <> t1 `hCompare` t2
-    hCompare (NSeqConsNullable _ _ _) (NSeqConsStrict _ _) =
+    hCompare (NSeqConsNullable _ _ _) _ =
         LT
+    hCompare _ (NSeqConsNullable _ _ _) =
+        GT
 
     hCompare (NSeqConsStrict h1 t1) (NSeqConsStrict h2 t2) =
         h1 `hCompare` h2 <> t1 `hCompare` t2
-    hCompare (NSeqConsStrict _ _) (NSeqConsNullable _ _ _) =
-        GT
 
 
 instance (GSet c, Ord (CharacterClass c)) => Ord (NormalizedRegExp c isUnion isSeq isNullable) where
@@ -884,7 +885,7 @@ rLiteral :: forall c. GSet c => CharacterClass c -> RegExp c
 rLiteral p | p == zero =
     RZero
 rLiteral p | otherwise =
-    RNormalized $ NUnion p Set.empty Set.empty
+    nUnion p Set.empty Set.empty
 
 
 -- * Printing
@@ -900,9 +901,26 @@ instance (GSet c, Show (CharacterClass c)) => Show (RegExp c) where
         showsPrec d r
 
 
-instance (GSet c, Show (CharacterClass c)) => Show (RegExpView c (RegExp c)) where
-    showsPrec d r =
-        showsPrec d (hide r)
+instance (GSet c, Show (CharacterClass c), Show r) => Show (RegExpView c r) where
+    showsPrec _ One =
+        showString "<>"
+    showsPrec d (Plus r1 r2) =
+        showParen (d > plusPrec) $
+        showsPrec plusPrec r1 . showString " ++ " . showsPrec plusPrec r2
+        where
+            plusPrec = 9
+    showsPrec d (Times r1 r2) =
+        showParen (d > timesPrec) $
+        showsPrec timesPrec r1 . showString "##" . showsPrec timesPrec r2
+        where
+            timesPrec = 10
+    showsPrec d (Star r) =
+        showParen (d > starPrec) $
+        showsPrec starPrec r . showString "**"
+        where
+            starPrec = 11
+    showsPrec d (Literal p) =
+        showsPrec d p
 
 
 instance (GSet c, Show (CharacterClass c)) => Show (NormalizedRegExp c isUnion isSeq isNullable) where
@@ -939,9 +957,11 @@ instance (GSet c, Show (CharacterClass c)) => Show (NormalizedRegExp c isUnion i
         where
             starPrec = 8
 
+
 instance (GSet c, Show (CharacterClass c)) => Show (SubUnion c isNullable) where
     showsPrec d (SubUnion r) =
         showsPrec d r
+
 
 instance (GSet c, Show (CharacterClass c)) => Show (SubSeq c isNullable) where
     showsPrec d (SubSeq r) =
@@ -1042,11 +1062,31 @@ instance (GSet c, Arbitrary (CharacterClass c)) => Arbitrary (RegExp c) where
 
     shrink r =
         case view r of
-            Plus r1 r2 ->
-                [r1, r2]
-            Times r1 r2 ->
-                [r1, r2]
-            Star r ->
-                [r]
-            _ ->
+            One ->
                 []
+            Plus r1 r2 ->
+                concat [
+                    [r1, r2],
+                    [s1 `rPlus` r2 | s1 <- shrink r1],
+                    [r1 `rPlus` s2 | s2 <- shrink r2]
+                ]
+            Times r1 r2 ->
+                concat [
+                    [r1, r2],
+                    [s1 `rTimes` r2 | s1 <- shrink r1],
+                    [r1 `rTimes` s2 | s2 <- shrink r2]
+                ]
+            Star r ->
+                r : [rStar s | s <- shrink r]
+            Literal p ->
+                [rLiteral s | s <- shrink p]
+
+
+instance (GSet c, Monad m, Serial m (CharacterClass c)) => Serial m (RegExp c) where
+    series =
+        cons0 rZero \/
+        cons0 rOne \/
+        cons2 rPlus \/
+        cons2 rTimes \/
+        cons1 rStar \/
+        cons1 rLiteral

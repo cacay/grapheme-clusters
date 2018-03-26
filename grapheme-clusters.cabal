@@ -44,7 +44,8 @@ library
                          -- semiring-num,
                          singletons,
                          finite-typelits,
-                         QuickCheck
+                         QuickCheck,
+                         smallcheck
 
   default-extensions:    ScopedTypeVariables
                          OverloadedStrings
@@ -73,15 +74,20 @@ test-suite spec
 
   main-is:               Spec.hs
 
-  other-modules:         RegExp.RegExpSpec
+  other-modules:         Data.GSetSpec
+                         RegExp.RegExpSpec
+                         Helpers
 
   build-depends:         base >= 4.11,
                          grapheme-clusters,
                          hspec,
-                         QuickCheck
+                         hspec-smallcheck,
+                         QuickCheck,
+                         smallcheck
 
   default-extensions:    ScopedTypeVariables
                          OverloadedStrings
+                         OverloadedLists
                          StandaloneDeriving
                          DeriveFunctor
 

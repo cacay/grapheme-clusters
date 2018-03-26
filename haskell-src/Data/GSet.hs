@@ -1,4 +1,8 @@
 {-# LANGUAGE TypeFamilies #-}
+
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -10,7 +14,10 @@ module Data.GSet
     ) where
 
 import Prelude hiding (and, or)
+import Flow
+
 import Data.String (IsString(..))
+import GHC.Generics
 import GHC.Exts (IsList(..))
 
 import Data.Function (on)
@@ -20,7 +27,8 @@ import qualified Data.Set
 import Data.BooleanAlgebra (BooleanAlgebra(..))
 import Data.Semiring (Semiring(..), DetectableZero(..))
 
-import Test.QuickCheck
+import Test.QuickCheck as QuickCheck
+import Test.SmallCheck.Series as SmallCheck
 
 
 -- | Sets over a type @a@.
@@ -105,6 +113,7 @@ data FiniteSet a
 
     -- | Set containing the complement of the given elements.
     | ComplementOf (Data.Set.Set a)
+    deriving (Generic)
 
 
 -- | Equality of finite and cofinite subsets of a finite type is decidable.
@@ -121,14 +130,17 @@ instance (Bounded a, Enum a, Ord a) => Eq (FiniteSet a) where
 
 -- | We can totally order the finite and cofinite subsets of a finite type.
 instance forall a.(Bounded a, Enum a, Ord a) => Ord (FiniteSet a) where
-    compare (These s1) (These s2) =
-        compare s1 s2
-    compare p1@(These _) p2@(ComplementOf _) =
-        (compare `on` toList) p1 p2
-    compare p1@(ComplementOf _) p2@(These _) =
-        (compare `on` toList) p1 p2
-    compare (ComplementOf s1) p2@(ComplementOf s2) =
-        compare s2 s1
+    -- | Order by size first; then use lexicographical order on the elements.
+    compare p1 p2 =
+        compare (size p1) (size p2) <> lex p1 p2
+        where
+            lex (ComplementOf s1) (ComplementOf s2) =
+                -- This is a lot more efficient than turning complemented
+                -- sets into lists. Note that the order of arguments to the
+                -- comparison is reversed.
+                (compare `on` Data.Set.toAscList) s2 s1
+            lex _ _ =
+                (compare `on` toList) p1 p2
 
 
 -- | Nicer interface for inputting finite sets over 'Char'.
@@ -148,21 +160,10 @@ instance (Bounded a, Enum a, Ord a) => IsList (FiniteSet a) where
     -- a finite type. For infinite types, size of cofinite subsets
     -- is infinite, so this is not possible.
     toList (These s) =
-        Data.Set.toList s
+        Data.Set.toAscList s
     toList (ComplementOf s) =
         [a | a <- [minBound..maxBound], Data.Set.notMember a s]
 
-
-
-{-
-instance {-# OVERLAPS #-} Show (FiniteSet Char) where
-    show (These s) =
-        "{" ++ Data.Set.toList s ++ "}"
-    show (ComplementOf s) | Data.Set.null s =
-        "."
-    show (ComplementOf s) =
-        "~" ++ "{" ++ Data.Set.toList s ++ "}"
--}
 
 instance Show a => Show (FiniteSet a) where
     show (These s) =
@@ -248,3 +249,16 @@ instance (Arbitrary a, Ord a) => Arbitrary (FiniteSet a) where
         fmap These (shrink s)
     shrink (ComplementOf s) =
         fmap These (shrink s) ++ fmap ComplementOf (shrink s)
+
+
+instance (Serial m a, Enum a, Bounded a, Ord a) => Serial m (Data.Set.Set a) where
+    series = SmallCheck.generate $ \depth ->
+        Data.Set.toList allSubsets
+            |> filter ((<= depth) . Data.Set.size)
+        where
+            allSubsets =
+                ([minBound .. maxBound] :: [a])
+                    |> Data.Set.fromList
+                    |> Data.Set.powerSet
+
+instance (Serial m a, Enum a, Bounded a, Ord a) => Serial m (FiniteSet a)
