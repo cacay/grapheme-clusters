@@ -1,4 +1,6 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 -- | Derivatives of regular expressions that support character classes.
 -- The development follows
@@ -19,13 +21,21 @@ module RegExp.Derivative
     ) where
 
 import Prelude hiding (Word)
-import qualified Data.Set
+
+import Control.Exception.Base(assert)
+import Control.Monad(unless, when)
+import Control.Monad.Except(MonadError(..), runExceptT)
+import qualified Data.Equivalence.Monad as Equiv
+import qualified Data.Equivalence.STT as EquivSTT
+
+import Data.Set(Set)
+import qualified Data.Set as Set
 
 import RegExp.RegExp
 
 import Data.BooleanAlgebra
 import Data.Semiring (Semiring(..))
-import Data.GSet
+import Data.GSet hiding (Set)
 
 
 
@@ -67,17 +77,17 @@ derivative c r =
 partialDerivative :: forall c. GSet c
                   => c
                   -> RegExp c
-                  -> Data.Set.Set (RegExp c)
+                  -> Set (RegExp c)
 partialDerivative c r =
     case view r of
         One ->
-            Data.Set.empty
+            Set.empty
 
         Plus r1 r2 ->
-            partialDerivative c r1 `Data.Set.union` partialDerivative c r2
+            partialDerivative c r1 `Set.union` partialDerivative c r2
 
         Times r1 r2 | nullable r1 ->
-            Data.Set.union
+            Set.union
                 (partialDerivative c r1 `setTimes` r2)
                 (partialDerivative c r2)
 
@@ -88,12 +98,12 @@ partialDerivative c r =
             partialDerivative c r' `setTimes` r
 
         Literal p ->
-            if c `member` p then Data.Set.singleton rOne else Data.Set.empty
+            if c `member` p then Set.singleton rOne else Set.empty
 
     where
-        setTimes :: Data.Set.Set (RegExp c) -> RegExp c -> Data.Set.Set (RegExp c)
+        setTimes :: Set (RegExp c) -> RegExp c -> Set (RegExp c)
         setTimes s r =
-            Data.Set.map (`rTimes` r) s
+            Set.map (`rTimes` r) s
 
 
 
@@ -107,52 +117,76 @@ matches r (c : w) =
     matches (derivative c r) w
 
 
--- | Two regular expressions are equivalent if only if they match
--- the same set of strings.
-equivalent :: forall c. GSet c => RegExp c -> RegExp c -> Bool
-equivalent =
-    helper Data.Set.empty
+-- | Two regular expressions are equivalent if and only if they match
+-- the same set of strings. This function will check for equivalence,
+-- and return a witness in the case the expressions are different.
+-- One of the expressions will match the witness and the other won't.
+equivalent :: forall c. GSet c => RegExp c -> RegExp c -> Either (Word c) ()
+equivalent r1 r2 =
+    case Equiv.runEquivM' (runExceptT (check r1 r2)) of
+        Left w ->
+            assert (r1 `matches` w /= r2 `matches` w) $
+            Left w
+
+        Right () ->
+            Right ()
     where
-        -- TODO: do we have to use union find instead? It will certainly be more
-        -- efficient, but we might in fact need it for completeness.
-        helper :: Data.Set.Set (RegExp c, RegExp c) -> RegExp c -> RegExp c -> Bool
-        helper context r1 r2 | (r1, r2) `Data.Set.member` context =
-            True
-        helper _ r1 r2 | nullable r1 /= nullable r2 =
-            False
-        helper context r1 r2 =
-            let
-                derivatives =
-                    [ (derivative c r1, derivative c r2)
-                    | p <- Data.Set.toList (next r1 `join` next r2)
-                    , Just c <- [choose p]
-                    ]
-            in
-                all (uncurry $ helper $ Data.Set.insert (r1, r2) context) derivatives
+        -- | Hopcroft and Karp's bisimulation algorithm.
+        check :: (MonadError (Word c) m, Equiv.MonadEquiv (EquivSTT.Class s () (RegExp c)) (RegExp c) () m)
+              => RegExp c
+              -> RegExp c
+              -> m ()
+        check r1 r2 = do
+            weAlreadyChecked <- Equiv.equivalent r1 r2
+            unless weAlreadyChecked $ do
+                when (nullable r1 /= nullable r2) $
+                    -- These expressions differ since one can match the empty
+                    -- word and the other cannot. The empty word is our witness.
+                    throwError []
+
+                -- Assume these "states" are equivalent, check following states.
+                Equiv.equate r1 r2
+
+                let derivatives =
+                        [ (c, derivative c r1, derivative c r2)
+                        | p <- Set.toList (next r1 `join` next r2)
+                        , Just c <- [choose p]
+                        ]
+
+                mapM_ checkNext derivatives
+
+
+        -- | Check states reached by a character.
+        checkNext :: (MonadError (Word c) m, Equiv.MonadEquiv (EquivSTT.Class s () (RegExp c)) (RegExp c) () m)
+              => (c, RegExp c, RegExp c)
+              -> m ()
+        checkNext (c, r1, r2) =
+            check r1 r2 `catchError` \w ->
+                throwError (c : w)
 
 
 
 -- * Automata construction
 
 -- | Set of derivatives of a regular expression under all words.
-allDerivatives :: forall c. GSet c => RegExp c -> Data.Set.Set (RegExp c)
+allDerivatives :: forall c. GSet c => RegExp c -> Set (RegExp c)
 allDerivatives r =
-    Data.Set.insert rZero (helper Data.Set.empty [r])
+    Set.insert rZero (helper Set.empty [r])
     where
-        helper :: Data.Set.Set (RegExp c) -> [RegExp c] -> Data.Set.Set (RegExp c)
+        helper :: Set (RegExp c) -> [RegExp c] -> Set (RegExp c)
         helper context [] =
             context
 
-        helper context (r : rest) | r `Data.Set.member` context =
+        helper context (r : rest) | r `Set.member` context =
             helper context rest
 
         helper context (r : rest) =
             let
                 derivatives =
-                    [ derivative c r | p <- Data.Set.toList (next r)
+                    [ derivative c r | p <- Set.toList (next r)
                                      , Just c <- [choose p]]
             in
-                helper (Data.Set.insert r context) (derivatives ++ rest)
+                helper (Set.insert r context) (derivatives ++ rest)
 
 
 
@@ -164,11 +198,11 @@ allDerivatives r =
 -- * @p `member` next r@ and @c1 `member` p && c2 `member` p@ implies
 --   @derivative c1 r = derivative c2 r@,
 -- * @not $ c `member` ors (next r)@ implies @derivative c r ~ rZero@.
-next :: GSet c => RegExp c -> Data.Set.Set (CharacterClass c)
+next :: GSet c => RegExp c -> Set (CharacterClass c)
 next r =
     case view r of
         One ->
-            Data.Set.singleton zero
+            Set.singleton zero
 
         Plus r1 r2 ->
             join (next r1) (next r2)
@@ -183,7 +217,7 @@ next r =
             next r
 
         Literal p  ->
-            Data.Set.singleton p
+            Set.singleton p
 
 
 -- | Given two sets of mutually disjoint character classes, compute
@@ -199,12 +233,12 @@ next r =
 -- * @'all' (\p -> 'all' (\p1 -> p '<.>' p1 == 'zero' || p `subset` p1) s1) ('join' s1 s2)@
 -- * @'all' (\p -> 'all' (\p2 -> p '<.>' p2 == 'zero' || p `subset` p2) s2) ('join' s1 s2)@
 join :: GSet c
-     => Data.Set.Set (CharacterClass c)
-     -> Data.Set.Set (CharacterClass c)
-     -> Data.Set.Set (CharacterClass c)
-join s1 s2 = Data.Set.fromList $ concat $ do
-    p1 <- Data.Set.toList s1
-    p2 <- Data.Set.toList s2
+     => Set (CharacterClass c)
+     -> Set (CharacterClass c)
+     -> Set (CharacterClass c)
+join s1 s2 = Set.fromList $ concat $ do
+    p1 <- Set.toList s1
+    p2 <- Set.toList s2
     return
         [ p1 <.> p2
         , p1 `butNot` ors s2
@@ -213,7 +247,7 @@ join s1 s2 = Data.Set.fromList $ concat $ do
 
 
 -- | Test if a set of character classes are pairwise disjoint.
-disjoint :: GSet c => Data.Set.Set (CharacterClass c) -> Bool
+disjoint :: GSet c => Set (CharacterClass c) -> Bool
 disjoint s =
-    let s' = Data.Set.toList s in
+    let s' = Set.toList s in
         and [ p1 <.> p2 == zero | p1 <- s', p2 <- s', p1 /= p2 ]

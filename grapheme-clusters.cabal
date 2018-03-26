@@ -41,6 +41,7 @@ library
                          flow,
                          mtl,
                          containers,
+                         equivalence,
                          -- semiring-num,
                          singletons,
                          finite-typelits,

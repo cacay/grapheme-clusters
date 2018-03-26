@@ -9,6 +9,7 @@ module RegExp.Language
     , regexp
     ) where
 
+import Data.Either (isRight)
 
 import RegExp.RegExp
 import RegExp.Derivative
@@ -40,7 +41,7 @@ regexp (Language r) =
 -- | Equivalence of regular languages is decidable.
 instance GSet c => Eq (Language c) where
     l1 == l2 =
-        equivalent (regexp l1) (regexp l2)
+        isRight $ equivalent (regexp l1) (regexp l2)
 
 
 -- | Regular languages form a semiring.
