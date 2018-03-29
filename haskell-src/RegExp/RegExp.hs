@@ -1104,16 +1104,13 @@ data ListView c e
 
 instance (GSet c, Arbitrary (CharacterClass c)) => Arbitrary (RegExp c) where
     arbitrary = do
-        d <- choose (0, 14)
-        arbitraryWithDepth d
-        where
-            -- | Arbitrary regular expression with the given depth.
-            arbitraryWithDepth :: Int -> Gen (RegExp c)
-            arbitraryWithDepth 0 =
-                oneof [zero, one, literal]
-            arbitraryWithDepth n =
-                oneof [plus (n - 1), times (n - 1), star (n - 1)]
+        size <- getSize
+        if size <= 1 then
+            oneof [zero, one, literal]
+        else
+            oneof [plus, times, star]
 
+        where
             zero :: Gen (RegExp c)
             zero =
                 return rZero
@@ -1122,27 +1119,35 @@ instance (GSet c, Arbitrary (CharacterClass c)) => Arbitrary (RegExp c) where
             one =
                 return rOne
 
-            plus :: Int -> Gen (RegExp c)
-            plus d = do
-                l <- arbitraryWithDepth d
-                r <- arbitraryWithDepth d
+            plus :: Gen (RegExp c)
+            plus = do
+                l <- subtree
+                r <- subtree
                 return (l `rPlus` r)
 
-            times :: Int -> Gen (RegExp c)
-            times d = do
-                l <- arbitraryWithDepth d
-                r <- arbitraryWithDepth d
+            times :: Gen (RegExp c)
+            times = do
+                l <- subtree
+                r <- subtree
                 return (l `rTimes` r)
 
-            star :: Int -> Gen (RegExp c)
-            star d = do
-                r <- arbitraryWithDepth d
+            star :: Gen (RegExp c)
+            star = do
+                r <- subtree
                 return (rStar r)
 
             literal :: Gen (RegExp c)
             literal = do
-                p <- arbitrary
+                p <- resize 5 arbitrary
                 return (rLiteral p)
+
+            -- | Decrement the size parameter before generating
+            -- a regular expression
+            subtree :: Gen (RegExp c)
+            subtree = do
+                size <- getSize
+                newSize <- choose (0, size - 1)
+                resize newSize arbitrary
 
     shrink r =
         case view r of

@@ -20,7 +20,5 @@ spec :: Spec
 spec = do
     describe "regexp" $ do
         it "is the inverse of fromRegExp" $ do
-            True `shouldBe` True
-            -- TODO: this infinite loops
-            -- property $ \(r :: RegExp Helpers.Small) ->
-            --regexp (fromRegExp r) `shouldSatisfy` (isRight . equivalent r)
+            property $ \(r :: RegExp Helpers.Small) ->
+                regexp (fromRegExp r) `shouldSatisfy` (isRight . equivalent r)
