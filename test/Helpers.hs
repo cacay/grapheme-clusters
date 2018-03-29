@@ -11,6 +11,8 @@ module Helpers where
 
 import GHC.Generics
 
+import Test.QuickCheck.Arbitrary
+import Test.QuickCheck.Gen
 import Test.SmallCheck.Series
 
 
@@ -23,3 +25,8 @@ data Small
 
 
 instance Monad m => Serial m Small
+
+instance Arbitrary Small where
+    arbitrary =
+        elements [minBound.. ]
+

@@ -1,8 +1,6 @@
 {-# LANGUAGE TypeFamilies #-}
 
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -17,7 +15,6 @@ import Prelude hiding (and, or)
 import Flow
 
 import Data.String (IsString(..))
-import GHC.Generics
 import GHC.Exts (IsList(..))
 
 import Data.Function (on)
@@ -113,7 +110,6 @@ data FiniteSet a
 
     -- | Set containing the complement of the given elements.
     | ComplementOf (Data.Set.Set a)
-    deriving (Generic)
 
 
 -- | Equality of finite and cofinite subsets of a finite type is decidable.
@@ -251,14 +247,22 @@ instance (Arbitrary a, Ord a) => Arbitrary (FiniteSet a) where
         fmap These (shrink s) ++ fmap ComplementOf (shrink s)
 
 
-instance (Serial m a, Enum a, Bounded a, Ord a) => Serial m (Data.Set.Set a) where
+-- | We use a newtype to define a 'Serial' instance for 'Data.Set.Set'
+-- so we don't pollute the global class space.
+newtype Set' a =
+    Set' {unSet' :: Data.Set.Set a}
+
+instance (Serial m a, Enum a, Bounded a, Ord a) => Serial m (Set' a) where
     series = SmallCheck.generate $ \depth ->
         Data.Set.toList allSubsets
             |> filter ((<= depth) . Data.Set.size)
+            |> fmap Set'
         where
             allSubsets =
                 ([minBound .. maxBound] :: [a])
                     |> Data.Set.fromList
                     |> Data.Set.powerSet
 
-instance (Serial m a, Enum a, Bounded a, Ord a) => Serial m (FiniteSet a)
+instance (Serial m a, Enum a, Bounded a, Ord a) => Serial m (FiniteSet a) where
+    series =
+        cons1 (These . unSet') \/ cons1 (ComplementOf . unSet')

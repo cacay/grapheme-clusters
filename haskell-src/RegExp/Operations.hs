@@ -8,7 +8,7 @@ module RegExp.Operations
     ) where
 
 
-import qualified DFA
+import qualified RegExp.Internal.DFA as DFA
 import RegExp.RegExp
 
 import qualified Data.BooleanAlgebra as BooleanAlgebra

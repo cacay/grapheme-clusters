@@ -43,14 +43,16 @@ newtype SparseVector (n :: Nat) a =
     }
 
 
--- | Construct a sparse vector from a list of indexed elements. Indexes not
--- in the list are all set to zero. We need to be able to tell when elements
--- are zero so we can filter them out.
+-- | Construct a sparse vector from a list of indexed elements. Indexes
+-- not in the list are all set to zero. Duplicate indexes are combined
+-- with '(<+>)'. We need to be able to tell when elements are zero so we
+-- can filter them out.
 vector :: (DetectableZero a, KnownNat n) => [(Finite n, a)] -> SparseVector n a
 vector l =
     UnsafeMakeSparseVector {
         elements =
-            removeZeros $ IntMap.fromList [(fromIntegral i, a) | (i, a) <- l]
+            removeZeros $
+                IntMap.fromListWith (<+>) [(fromIntegral i, a) | (i, a) <- l]
     }
 
 

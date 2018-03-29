@@ -20,6 +20,7 @@ module SparseMatrix
     , matrix
     , fromRows
     , (!)
+    , nthRow
 
     , plus
     , times
@@ -27,6 +28,7 @@ module SparseMatrix
 
     , map
     , nonZero
+    , nonZeroRows
     , toList
     ) where
 
@@ -59,7 +61,7 @@ newtype SparseMatrix (r :: Nat) (c :: Nat) a =
     }
 
 
--- | Value at the given index.
+-- | Value at the given row and column.
 (!) :: (DetectableZero a, KnownNat r, KnownNat c)
     => SparseMatrix r c a
     -> (Finite r, Finite c)
@@ -68,8 +70,18 @@ m ! (r, c) =
     (rows m Vector.! r) Vector.! c
 
 
+-- | Row with the given index.
+nthRow :: (DetectableZero a, KnownNat r, KnownNat c)
+    => Finite r
+    -> SparseMatrix r c a
+    -> SparseVector c a
+nthRow r m =
+    rows m Vector.! r
+
+
 -- | Construct a sparse matrix from a list of indexed elements. Indices
--- that don't appear in the list are all set to zero.
+-- that don't appear in the list are all set to zero. Duplicate indexes
+-- are combined with '(<+>)'.
 --
 -- We need detectable zeros so we can filter them out.
 matrix :: (DetectableZero a, KnownNat r, KnownNat c)
@@ -216,6 +228,16 @@ nonZero m =
     concatMap
       (\(r, row) -> [((r, c), a) | (c, a) <- Vector.nonZero row])
       (Vector.nonZero $ rows m)
+
+
+-- | Iterate over non-zero elements in a matrix grouped by rows.
+nonZeroRows :: (KnownNat r, KnownNat c)
+        => SparseMatrix r c a
+        -> [(Finite r, [(Finite c, a)])]
+nonZeroRows m =
+    fmap
+        (\(r, row) -> (r, Vector.nonZero row))
+        (Vector.nonZero $ rows m)
 
 
 -- | Convert a vector to a list.

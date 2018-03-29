@@ -30,12 +30,13 @@ library
                          Data.GSet
                          Data.Semiring
 
+                         RegExp.Internal.DFA
+
                          Segmentation
                          GraphemeClusterBreak
 
   other-modules:         SparseVector
                          SparseMatrix
-                         DFA
 
   build-depends:         base >= 4.11,
                          flow,
@@ -77,6 +78,7 @@ test-suite spec
 
   other-modules:         Data.GSetSpec
                          RegExp.RegExpSpec
+                         RegExp.Internal.DFASpec
                          Helpers
 
   build-depends:         base >= 4.11,
@@ -88,7 +90,6 @@ test-suite spec
 
   default-extensions:    ScopedTypeVariables
                          OverloadedStrings
-                         OverloadedLists
                          StandaloneDeriving
                          DeriveFunctor
 

@@ -8,7 +8,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 -- | Finite state automaton represented as matrices.
-module DFA
+module RegExp.Internal.DFA
     ( Dfa
 
     -- * Combining DFAs
@@ -21,6 +21,8 @@ module DFA
 
 import Prelude hiding (product)
 import Flow
+
+import Control.Exception.Base(assert)
 
 import Data.Finite
 import Data.Singletons
@@ -79,6 +81,19 @@ data DfaSize (n :: Nat) c =
     }
 
 
+-- | Verify that the given DFA satisfies the conditions outlined in 'DfaSize',
+-- and return the DFA unchanged if so. Raises an exception otherwise.
+assertValid :: forall c. GSet c => Dfa c -> Dfa c
+assertValid r@(Dfa (d :: DfaSize n c)) =
+    assert transitionValid $
+        r
+    where
+        transitionValid =
+            all
+                (== one)
+                [Vector.sum $ Matrix.nthRow r (transition d) | r <- finites]
+
+
 -- | Generic product construction over two DFAs. Intersection
 -- and union of DFAs can be recovered as special cases by passing
 -- in '(<.>)' and '(<+>)', respectively.
@@ -89,6 +104,7 @@ product :: forall c. GSet c
         -> Dfa c
 product f (Dfa (d1 :: DfaSize n c)) (Dfa (d2 :: DfaSize m c)) =
     withKnownNat ((sing :: SNat n) %* (sing :: SNat m)) $
+    assertValid $
     Dfa $ DfaSize {
         start =
             state (start d1) (start d2),
@@ -126,6 +142,7 @@ product f (Dfa (d1 :: DfaSize n c)) (Dfa (d2 :: DfaSize m c)) =
 intersection :: forall c. GSet c => Dfa c -> Dfa c -> Dfa c
 intersection (Dfa (d1 :: DfaSize n c)) (Dfa (d2 :: DfaSize m c)) =
     withKnownNat ((sing :: SNat n) %* (sing :: SNat m)) $
+    assertValid $
     Dfa $ DfaSize {
         start =
             state (start d1) (start d2),
@@ -157,6 +174,7 @@ intersection (Dfa (d1 :: DfaSize n c)) (Dfa (d2 :: DfaSize m c)) =
 instance GSet c => Semiring (Dfa c) where
     -- | DFA that accepts no words.
     zero =
+        assertValid $
         Dfa $ DfaSize {
             start =
                 finite 0 :: Finite 1,
@@ -170,6 +188,7 @@ instance GSet c => Semiring (Dfa c) where
 
     -- | DFA that accepts all words.
     one =
+        assertValid $
         Dfa $ DfaSize {
             start =
                 finite 0 :: Finite 1,
@@ -195,6 +214,7 @@ instance GSet c => Semiring (Dfa c) where
 instance GSet c => BooleanAlgebra (Dfa c) where
     -- | @complement d@ accepts precisely the words that @d@ doesn't.
     complement (Dfa d) =
+        assertValid $
         Dfa $
             d {
                 accept =
@@ -259,6 +279,7 @@ fromRegExp r =
                         , Just c <- [choose p]
                         ]
             in
+                assertValid $
                 Dfa $ DfaSize {
                     start =
                         state r,
