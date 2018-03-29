@@ -3,8 +3,8 @@ all: coq.mk
 	$(MAKE) -f coq.mk
 
 
-coq.mk: _CoqProject *.v
-	coq_makefile -f _CoqProject -o $@ *.v
+coq.mk: _CoqProject coq-src/*.v
+	coq_makefile -f _CoqProject -o $@ coq-src/*.v
 
 
 clean: coq.mk
