@@ -68,6 +68,12 @@ spec = do
             property $ \(r :: RegExp Char) -> hideAll (viewAll r) `shouldBe` r
 
 
+    describe "read" $ do
+        it "is the inverse of show" $ do
+            withMaxSuccess 5 $ -- Reading and/or printing is super slow!
+                property $ \(r :: RegExp Char) -> read (show r) `shouldBe` r
+
+
 
 -- | Fixed point of a functor.
 data Fix f = Fix {unFix :: f (Fix f)}

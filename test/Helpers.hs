@@ -21,7 +21,7 @@ data Small
     = A
     | B
     | C
-    deriving (Eq, Ord, Bounded, Enum, Show, Generic)
+    deriving (Eq, Ord, Bounded, Enum, Show, Read, Generic)
 
 
 instance Monad m => Serial m Small

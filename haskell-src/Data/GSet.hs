@@ -16,6 +16,7 @@ import Flow
 
 import Data.String (IsString(..))
 import GHC.Exts (IsList(..))
+import qualified Text.ParserCombinators.ReadP as Parser
 
 import Data.Function (on)
 import Data.List (intercalate)
@@ -168,6 +169,39 @@ instance Show a => Show (FiniteSet a) where
         "."
     show (ComplementOf s) =
         "~{" ++ intercalate "," (map show $ Data.Set.toList s) ++ "}"
+
+
+instance (Read a, Ord a) => Read (FiniteSet a) where
+    readsPrec _ =
+        Parser.readP_to_S parser
+
+        where
+            parser :: Parser.ReadP (FiniteSet a)
+            parser = do
+                Parser.skipSpaces
+                Parser.choice
+                    [ do {Parser.char '.'; return one}
+                    , do {Parser.char '~'; fmap ComplementOf elements}
+                    , do {fmap These elements}
+                    ]
+
+            elements :: Parser.ReadP (Data.Set.Set a)
+            elements =
+                Parser.between openBrace closeBrace $ do
+                    elements <- Parser.sepBy (Parser.readS_to_P reads) comma
+                    return $ Data.Set.fromList elements
+
+            openBrace = do
+                Parser.char '{'
+                Parser.skipSpaces
+
+            closeBrace = do
+                Parser.skipSpaces
+                Parser.char '}'
+
+            comma = do
+                Parser.char ','
+                Parser.skipSpaces
 
 
 -- | Set containing no elements.

@@ -50,6 +50,7 @@ import qualified Data.Set as Set
 import Data.Either (isRight)
 import qualified Data.List as List
 import Data.String (IsString(..))
+import qualified Text.ParserCombinators.ReadP as Parser
 
 import Data.GSet (GSet)
 import qualified Data.GSet as GSet
@@ -1000,6 +1001,89 @@ showUnion d p l =
 intercalate :: ShowS -> [ShowS] -> ShowS
 intercalate sep l =
     foldr (.) id (List.intersperse sep l)
+
+
+
+-- * Parsing
+
+instance (GSet c, Read (CharacterClass c)) => Read (RegExp c) where
+    readsPrec _ =
+        Parser.readP_to_S parser
+
+        where
+            parser :: Parser.ReadP (RegExp c)
+            parser = do
+                Parser.skipSpaces
+                pPlus
+
+            pPlus :: Parser.ReadP (RegExp c)
+            pPlus =
+                Parser.choice
+                    [ do
+                        left <- pTimes
+                        Parser.char '+'
+                        Parser.skipSpaces
+                        right <- pPlus
+                        return $ left `rPlus` right
+
+                    , pTimes
+                    ]
+
+            pTimes :: Parser.ReadP (RegExp c)
+            pTimes =
+                Parser.choice
+                    [ do
+                        left <- pStar
+                        Parser.char '#'
+                        Parser.skipSpaces
+                        right <- pTimes
+                        return $ left `rTimes` right
+
+                    , pStar
+                    ]
+
+            pStar :: Parser.ReadP (RegExp c)
+            pStar = do
+                atom <- pAtom
+                ops <- Parser.many postfix
+                return $ foldr ($) atom ops
+
+            pAtom :: Parser.ReadP (RegExp c)
+            pAtom =
+                Parser.choice
+                    [ do
+                        p <- Parser.readS_to_P reads
+                        Parser.skipSpaces
+                        return $ rLiteral p
+
+                    , do
+                        Parser.string "<>"
+                        Parser.skipSpaces
+                        return rOne
+
+                    , do
+                        Parser.char '('
+                        Parser.skipSpaces
+                        r <- pPlus
+                        Parser.char ')'
+                        Parser.skipSpaces
+                        return r
+                    ]
+
+            postfix :: Parser.ReadP (RegExp c -> RegExp c)
+            postfix =
+                Parser.choice
+                    [ do
+                        Parser.char '?'
+                        Parser.skipSpaces
+                        return $ \r -> rOne `rPlus` r
+
+                    , do
+                        Parser.char '*'
+                        Parser.skipSpaces
+                        return rStar
+                    ]
+
 
 
 -- * Helpers
