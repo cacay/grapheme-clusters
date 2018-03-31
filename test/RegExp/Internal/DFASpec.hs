@@ -20,5 +20,6 @@ spec :: Spec
 spec = do
     describe "regexp" $ do
         it "is the inverse of fromRegExp" $ do
-            property $ \(r :: RegExp Helpers.Small) ->
-                regexp (fromRegExp r) `shouldSatisfy` (isRight . equivalent r)
+            mapSize (`div` 4) $
+                property $ \(r :: RegExp Helpers.Small) ->
+                    regexp (fromRegExp r) `shouldSatisfy` (isRight . equivalent r)

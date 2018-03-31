@@ -24,6 +24,7 @@ library
   exposed-modules:       RegExp.RegExp
                          RegExp.Language
                          RegExp.Derivative
+                         RegExp.Equation
                          RegExp.Operations
                          Data.BooleanAlgebra
                          Data.KleeneAlgebra
@@ -78,6 +79,7 @@ test-suite spec
 
   other-modules:         Data.GSetSpec
                          RegExp.RegExpSpec
+                         RegExp.OperationsSpec
                          RegExp.Internal.DFASpec
                          Helpers
 

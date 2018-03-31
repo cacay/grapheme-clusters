@@ -18,6 +18,7 @@ module RegExp.Derivative
     -- * Automata construction
     , allDerivatives
     , next
+    , join
     ) where
 
 import Prelude hiding (Word)
