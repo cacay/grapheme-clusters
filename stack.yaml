@@ -2,6 +2,7 @@ flags: {}
 
 packages:
 - '.'
+- 'regexp'
 
 resolver: nightly-2018-03-20
 
