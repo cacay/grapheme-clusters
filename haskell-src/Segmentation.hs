@@ -62,12 +62,12 @@ data Right c
 
 
 -- | Turn a list of text segmentation rules into a regular expression
--- that matches a single segment. That is, repeatedly matching prefixes
--- of the input text against the resulting regular expression will give
--- the same boundaries as the original list of rules.
+-- that matches a single segment. That is, repeatedly matching (longest)
+-- prefixes of the input text against the resulting regular expression will
+-- give the same boundaries as the original list of rules.
 regexp :: forall c. GSet c => Rules c -> RegExp c
 regexp (Rules rules) =
-    Operations.complement (helper rZero rules)
+    Operations.complement (helper rZero rules) `Operations.difference` rOne
     where
         -- | Match any string.
         any :: RegExp c
@@ -112,12 +112,12 @@ regexp (Rules rules) =
 
 graphemeClusterBoundaries :: Rules GraphemeClusterBreak
 graphemeClusterBoundaries = Rules
-    [ Boundary   (StartOfText rZero)               (AnyRight any)
-    , Boundary   (AnyLeft rOne)                     (EndOfText rZero)
-    , NoBoundary (AnyLeft $ lit [CR])              (AnyRight $ lit [LF])
-    , Boundary   (AnyLeft $ lit [Control, CR, LF]) (AnyRight rOne)
-    , Boundary   (AnyLeft rOne)                     (AnyRight $ lit [Control, CR, LF])
-    , Boundary   (AnyLeft any)                     (AnyRight $ any)
+    [ -- Boundary   (StartOfText rZero)               (AnyRight any)
+    -- , Boundary   (AnyLeft rOne)                     (EndOfText rZero)
+--      NoBoundary (AnyLeft $ lit [CR])              (AnyRight $ lit [LF])
+    -- , Boundary   (AnyLeft $ lit [Control, CR, LF]) (AnyRight any)
+    -- , Boundary   (AnyLeft any)                     (AnyRight $ lit [Control, CR, LF])
+    Boundary   (AnyLeft any)                     (AnyRight $ any)
     ]
     where
         lit = rLiteral

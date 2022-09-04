@@ -25,4 +25,4 @@ data GraphemeClusterBreak
     | GlueAfterZwj
     | EBaseGAZ
     | None
-    deriving (Eq, Ord, Bounded, Enum, Show)
+    deriving (Eq, Ord, Bounded, Enum, Show, Read)

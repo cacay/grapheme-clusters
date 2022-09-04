@@ -377,12 +377,52 @@ Qed.
 
 
 
+Section GraphemeClusters.
+
+(**
+ * A (possibly degenerate) grapheme cluster is any non-empty sequence of
+ * unicode scalars that is treated as a single unit by [clusters].
+ *)
+Inductive GraphemeCluster : Type :=
+  | GC : forall c : RawString, clusters c = [c] -> GraphemeCluster.
+
+
+(**
+ * We identify some subset of [GraphemeCluster]s as well-formed.
+ * It doesn't matter how this subset is chosen. We posit the properties
+ * we need.
+ *)
+Variable cluster_well_formed : GraphemeCluster -> Prop.
+
+
+(**
+ * Extract the [RawString] from a [GraphemeCluster].
+ * Useful for defining properties.
+ *)
+Definition raw_string (c : GraphemeCluster) : RawString :=
+  match c with
+  | GC s _ => s
+  end.
+
+
+(**
+ * The main issue we are trying to avoid is grapheme clusters combining
+ * with adjacent grapheme clusters. This is necessary for the string type
+ * to behave like a simple sequence of characters. We require that two
+ * well-formed grapheme clusters don't combine or interact with in any way
+ * with respect to [clusters].
+ *)
+Axiom well_formed_clusters_do_not_combine :
+  forall c1 c2 : GraphemeCluster,
+    cluster_well_formed c1 /\ cluster_well_formed c2 ->
+    clusters (raw_string c1 ++ raw_string c2) = [raw_string c1; raw_string c2].
+
 
 (* Left here *)
 
-(*
-Inductive ExtendedGraphemeCluster : Type :=
-  | egc : forall c : RawString, clusters c = [c] -> ExtendedGraphemeCluster.
-*)
+
+
+
+End GraphemeClusters.
 
 End UnicodeCharacters.
